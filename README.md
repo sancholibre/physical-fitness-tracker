@@ -103,4 +103,3 @@ npm start
 ---
 
 Built for accountability. Let's fucking go.
-# physical-fitness-tracker
