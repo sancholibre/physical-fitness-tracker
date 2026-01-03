@@ -10,7 +10,7 @@ const STORAGE_KEY = 'fbi-pft-tracker-alec';
 const EDIT_PASSWORD = 'agent195';
 
 // Cloudinary config - UPDATE THESE with your actual values
-const CLOUDINARY_CLOUD_NAME = 'your-cloud-name'; // TODO: Replace with your Cloudinary cloud name
+const CLOUDINARY_CLOUD_NAME = 'djbznowhf'; // TODO: Replace with your Cloudinary cloud name
 const CLOUDINARY_UPLOAD_PRESET = 'fbi_pft_proof'; // Create this unsigned preset in Cloudinary
 
 const WEIGHT_START = 190;
