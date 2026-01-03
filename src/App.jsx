@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import './App.css';
 
 // ============================================
@@ -8,6 +8,58 @@ import './App.css';
 
 const STORAGE_KEY = 'fbi-pft-tracker-alec';
 const EDIT_PASSWORD = 'agent195';
+
+// Cloudinary config - UPDATE THESE with your actual values
+const CLOUDINARY_CLOUD_NAME = 'djbznowhf'; // TODO: Replace with your Cloudinary cloud name
+const CLOUDINARY_UPLOAD_PRESET = 'fbi_pft_proof'; // Create this unsigned preset in Cloudinary
+
+// ============================================
+// CLOUDINARY UPLOAD SERVICE
+// ============================================
+
+async function uploadToCloudinary(file, onProgress) {
+  const formData = new FormData();
+  formData.append('file', file);
+  formData.append('upload_preset', CLOUDINARY_UPLOAD_PRESET);
+  formData.append('folder', 'fbi-pft');
+  
+  return new Promise((resolve, reject) => {
+    const xhr = new XMLHttpRequest();
+    
+    xhr.upload.addEventListener('progress', (e) => {
+      if (e.lengthComputable && onProgress) {
+        const pct = Math.round((e.loaded / e.total) * 100);
+        onProgress(pct);
+      }
+    });
+    
+    xhr.addEventListener('load', () => {
+      if (xhr.status >= 200 && xhr.status < 300) {
+        const response = JSON.parse(xhr.responseText);
+        resolve(response.secure_url);
+      } else {
+        reject(new Error(`Upload failed: ${xhr.status}`));
+      }
+    });
+    
+    xhr.addEventListener('error', () => reject(new Error('Network error')));
+    xhr.addEventListener('abort', () => reject(new Error('Upload cancelled')));
+    
+    xhr.open('POST', `https://api.cloudinary.com/v1_1/${CLOUDINARY_CLOUD_NAME}/auto/upload`);
+    xhr.send(formData);
+  });
+}
+
+async function uploadWithRetry(file, onProgress, maxRetries = 3) {
+  for (let i = 0; i < maxRetries; i++) {
+    try {
+      return await uploadToCloudinary(file, onProgress);
+    } catch (error) {
+      if (i === maxRetries - 1) throw error;
+      await new Promise(resolve => setTimeout(resolve, 1000 * (i + 1)));
+    }
+  }
+}
 
 // ============================================
 // DATA GENERATION
@@ -38,6 +90,11 @@ function generateAllDays() {
       isTravel: false,
       isCheckpoint: weekNum % 2 === 0 && dow === 6 && weekNum <= 12,
       notes: '',
+      proofFiles: {
+        appleHealth: null,
+        cronometer: null,
+        uploadedAt: null
+      }
     };
     
     // TRAVEL ADJUSTMENTS
@@ -296,7 +353,200 @@ function Stats({ stats }) {
   );
 }
 
-function DayCard({ day, isToday, isEditing, onToggle }) {
+// ============================================
+// FILE UPLOAD COMPONENT
+// ============================================
+
+function FileUpload({ dayId, type, currentUrl, onUpload, onRemove, isEditing }) {
+  const [uploading, setUploading] = useState(false);
+  const [progress, setProgress] = useState(0);
+  const [error, setError] = useState(null);
+  const [dragOver, setDragOver] = useState(false);
+  const inputRef = useRef(null);
+  
+  const label = type === 'appleHealth' ? '📱 Health' : '🥗 Cronometer';
+  const accept = type === 'appleHealth' ? 'image/*' : 'application/pdf,image/*';
+  
+  const handleFile = useCallback(async (file) => {
+    if (!file) return;
+    
+    // Validate file size (5MB max)
+    if (file.size > 5 * 1024 * 1024) {
+      setError('File too large (max 5MB)');
+      return;
+    }
+    
+    setUploading(true);
+    setProgress(0);
+    setError(null);
+    
+    try {
+      const url = await uploadWithRetry(file, setProgress);
+      onUpload(dayId, type, url);
+    } catch (err) {
+      setError('Upload failed. Try again.');
+      console.error('Upload error:', err);
+    } finally {
+      setUploading(false);
+      setProgress(0);
+    }
+  }, [dayId, type, onUpload]);
+  
+  const handleDrop = useCallback((e) => {
+    e.preventDefault();
+    setDragOver(false);
+    if (!isEditing) return;
+    const file = e.dataTransfer.files[0];
+    handleFile(file);
+  }, [isEditing, handleFile]);
+  
+  const handleDragOver = useCallback((e) => {
+    e.preventDefault();
+    if (isEditing) setDragOver(true);
+  }, [isEditing]);
+  
+  const handleDragLeave = useCallback(() => {
+    setDragOver(false);
+  }, []);
+  
+  const handleInputChange = useCallback((e) => {
+    const file = e.target.files[0];
+    handleFile(file);
+    e.target.value = ''; // Reset input
+  }, [handleFile]);
+  
+  const handleRemove = useCallback(() => {
+    if (window.confirm('Remove this proof file?')) {
+      onRemove(dayId, type);
+    }
+  }, [dayId, type, onRemove]);
+  
+  const isPdf = currentUrl?.toLowerCase().includes('.pdf');
+  
+  if (currentUrl) {
+    return (
+      <div className="proof-uploaded">
+        <span className="proof-label">{label}</span>
+        {isPdf ? (
+          <a href={currentUrl} target="_blank" rel="noopener noreferrer" className="proof-link">
+            📄 View PDF
+          </a>
+        ) : (
+          <a href={currentUrl} target="_blank" rel="noopener noreferrer" className="proof-thumb-link">
+            <img src={currentUrl} alt={label} className="proof-thumb" loading="lazy" />
+          </a>
+        )}
+        {isEditing && (
+          <button className="proof-remove" onClick={handleRemove} title="Remove">×</button>
+        )}
+      </div>
+    );
+  }
+  
+  if (!isEditing) {
+    return (
+      <div className="proof-missing">
+        <span className="proof-label">{label}</span>
+        <span className="proof-status missing">❌</span>
+      </div>
+    );
+  }
+  
+  return (
+    <div 
+      className={`proof-dropzone ${dragOver ? 'drag-over' : ''} ${uploading ? 'uploading' : ''}`}
+      onDrop={handleDrop}
+      onDragOver={handleDragOver}
+      onDragLeave={handleDragLeave}
+      onClick={() => !uploading && inputRef.current?.click()}
+    >
+      <input
+        ref={inputRef}
+        type="file"
+        accept={accept}
+        onChange={handleInputChange}
+        style={{ display: 'none' }}
+      />
+      <span className="proof-label">{label}</span>
+      {uploading ? (
+        <div className="upload-progress">
+          <div className="progress-bar">
+            <div className="progress-fill" style={{ width: `${progress}%` }}></div>
+          </div>
+          <span className="progress-text">{progress}%</span>
+        </div>
+      ) : (
+        <span className="proof-prompt">Drop or tap</span>
+      )}
+      {error && <span className="proof-error">{error}</span>}
+    </div>
+  );
+}
+
+// ============================================
+// PROOF STATUS COMPONENTS
+// ============================================
+
+function ProofStatusBadge({ day }) {
+  const hasHealth = !!day.proofFiles?.appleHealth;
+  const hasCrono = !!day.proofFiles?.cronometer;
+  const complete = hasHealth && hasCrono;
+  
+  if (complete) {
+    return <span className="proof-badge complete" title="Proof uploaded">📸✓</span>;
+  }
+  if (hasHealth || hasCrono) {
+    return <span className="proof-badge partial" title="Partial proof">{hasHealth ? '📱' : ''}{hasCrono ? '🥗' : ''}</span>;
+  }
+  return null;
+}
+
+function ProofCalendarGrid({ days }) {
+  const weeks = [];
+  for (let i = 0; i < days.length; i += 7) {
+    weeks.push(days.slice(i, i + 7));
+  }
+  
+  return (
+    <div className="proof-calendar">
+      <h4>📸 Proof Status</h4>
+      <div className="proof-weeks">
+        {weeks.map((week, wi) => (
+          <div key={wi} className="proof-week">
+            <span className="pw-label">W{wi + 1}</span>
+            <div className="pw-days">
+              {week.map(day => {
+                const isPast = new Date(day.date) < new Date(new Date().toDateString());
+                const hasHealth = !!day.proofFiles?.appleHealth;
+                const hasCrono = !!day.proofFiles?.cronometer;
+                const complete = hasHealth && hasCrono;
+                const partial = hasHealth || hasCrono;
+                
+                let cls = 'pd';
+                if (!isPast) cls += ' future';
+                else if (complete) cls += ' complete';
+                else if (partial) cls += ' partial';
+                else cls += ' missing';
+                
+                return (
+                  <span key={day.id} className={cls} title={day.date}>
+                    {complete ? '✓' : partial ? (hasHealth ? '📱' : '🥗') : isPast ? '❌' : '○'}
+                  </span>
+                );
+              })}
+            </div>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+// ============================================
+// DAY CARD COMPONENT
+// ============================================
+
+function DayCard({ day, isToday, isEditing, onToggle, onUploadProof, onRemoveProof }) {
   const dt = new Date(day.date + 'T12:00:00');
   const dayName = dt.toLocaleDateString('en-US', { weekday: 'short' });
   const monthDay = dt.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
@@ -306,6 +556,8 @@ function DayCard({ day, isToday, isEditing, onToggle }) {
   const total = items.length;
   const pct = total > 0 ? Math.round((done / total) * 100) : 0;
   const isPast = new Date(day.date) < new Date(new Date().toDateString());
+  
+  const hasAllProof = day.proofFiles?.appleHealth && day.proofFiles?.cronometer;
   
   let cardClass = 'day-card';
   if (isToday) cardClass += ' today';
@@ -325,6 +577,7 @@ function DayCard({ day, isToday, isEditing, onToggle }) {
         {day.location !== 'Denver' && <span className="loc">📍{day.location}</span>}
         {isToday && <span className="badge today">TODAY</span>}
         {day.isCheckpoint && <span className="badge cp">📊</span>}
+        {hasAllProof && <ProofStatusBadge day={day} />}
         {total > 0 && <span className={`score ${pct === 100 ? 'full' : ''}`}>{done}/{total}</span>}
       </div>
       
@@ -357,12 +610,37 @@ function DayCard({ day, isToday, isEditing, onToggle }) {
             </div>
           </div>
         )}
+        
+        {/* PROOF UPLOAD SECTION */}
+        {!day.isTravel && (
+          <div className="proof-section">
+            <div className="proof-label-row">📸 Daily Proof</div>
+            <div className="proof-uploads">
+              <FileUpload
+                dayId={day.id}
+                type="appleHealth"
+                currentUrl={day.proofFiles?.appleHealth}
+                onUpload={onUploadProof}
+                onRemove={onRemoveProof}
+                isEditing={isEditing}
+              />
+              <FileUpload
+                dayId={day.id}
+                type="cronometer"
+                currentUrl={day.proofFiles?.cronometer}
+                onUpload={onUploadProof}
+                onRemove={onRemoveProof}
+                isEditing={isEditing}
+              />
+            </div>
+          </div>
+        )}
       </div>
     </div>
   );
 }
 
-function Week({ weekNum, days, isEditing, onToggle }) {
+function Week({ weekNum, days, isEditing, onToggle, onUploadProof, onRemoveProof }) {
   const today = new Date().toISOString().split('T')[0];
   const phase = days[0]?.phase || 1;
   
@@ -374,7 +652,15 @@ function Week({ weekNum, days, isEditing, onToggle }) {
       </div>
       <div className="week-days">
         {days.map(d => (
-          <DayCard key={d.id} day={d} isToday={d.date === today} isEditing={isEditing} onToggle={onToggle} />
+          <DayCard 
+            key={d.id} 
+            day={d} 
+            isToday={d.date === today} 
+            isEditing={isEditing} 
+            onToggle={onToggle}
+            onUploadProof={onUploadProof}
+            onRemoveProof={onRemoveProof}
+          />
         ))}
       </div>
     </div>
@@ -466,6 +752,43 @@ function Modal({ week, onSave, onCancel }) {
   );
 }
 
+// ============================================
+// MISSING PROOF ALERT COMPONENT
+// ============================================
+
+function MissingProofAlert({ days, onScrollToDay }) {
+  const today = new Date();
+  const todayStr = today.toISOString().split('T')[0];
+  
+  // Find yesterday if it's missing proof
+  const yesterday = new Date(today);
+  yesterday.setDate(yesterday.getDate() - 1);
+  const yesterdayStr = yesterday.toISOString().split('T')[0];
+  
+  const yesterdayDay = days.find(d => d.id === yesterdayStr);
+  
+  if (!yesterdayDay || yesterdayDay.isTravel) return null;
+  
+  const hasHealth = !!yesterdayDay.proofFiles?.appleHealth;
+  const hasCrono = !!yesterdayDay.proofFiles?.cronometer;
+  
+  if (hasHealth && hasCrono) return null;
+  
+  return (
+    <div className="missing-proof-alert" onClick={() => onScrollToDay(yesterdayStr)}>
+      <span className="alert-icon">⚠️</span>
+      <span className="alert-text">
+        Yesterday missing proof: {!hasHealth && '📱'} {!hasCrono && '🥗'}
+      </span>
+      <span className="alert-action">Upload now →</span>
+    </div>
+  );
+}
+
+// ============================================
+// EMBED VIEW
+// ============================================
+
 function Embed({ stats, days }) {
   const recent = days
     .filter(d => new Date(d.date) <= new Date() && new Date(d.date) >= new Date(Date.now() - 7*24*60*60*1000))
@@ -487,10 +810,26 @@ function Embed({ stats, days }) {
         {recent.map(d => {
           const items = [...(d.activities||[]),...(d.habits||[])];
           const done = items.filter(x=>x.completed).length;
+          const hasHealth = !!d.proofFiles?.appleHealth;
+          const hasCrono = !!d.proofFiles?.cronometer;
+          const hasProof = hasHealth && hasCrono;
+          
           return (
             <div key={d.id} className={`er-row ${done===items.length&&items.length>0?'full':''}`}>
               <span>{new Date(d.date+'T12:00:00').toLocaleDateString('en-US',{weekday:'short',month:'short',day:'numeric'})}</span>
-              <span>{done}/{items.length}</span>
+              <span className="er-score">{done}/{items.length}</span>
+              <span className="er-proof">
+                {d.isTravel ? (
+                  <span className="proof-na">✈️</span>
+                ) : hasProof ? (
+                  <>
+                    <a href={d.proofFiles.appleHealth} target="_blank" rel="noopener noreferrer" className="proof-icon" title="Health">📱</a>
+                    <a href={d.proofFiles.cronometer} target="_blank" rel="noopener noreferrer" className="proof-icon" title="Cronometer">🥗</a>
+                  </>
+                ) : (
+                  <span className="proof-missing-embed">❌ No proof</span>
+                )}
+              </span>
             </div>
           );
         })}
@@ -501,12 +840,22 @@ function Embed({ stats, days }) {
 }
 
 // ============================================
-// MAIN
+// MAIN APP
 // ============================================
 
 export default function App() {
   const [days, setDays] = useState(() => {
-    try { return JSON.parse(localStorage.getItem(STORAGE_KEY)) || generateAllDays(); }
+    try { 
+      const stored = JSON.parse(localStorage.getItem(STORAGE_KEY));
+      if (stored) {
+        // Migrate old data: add proofFiles if missing
+        return stored.map(d => ({
+          ...d,
+          proofFiles: d.proofFiles || { appleHealth: null, cronometer: null, uploadedAt: null }
+        }));
+      }
+      return generateAllDays(); 
+    }
     catch { return generateAllDays(); }
   });
   const [checkpoints, setCheckpoints] = useState(() => {
@@ -514,8 +863,8 @@ export default function App() {
     catch { return {}; }
   });
   const [settings, setSettings] = useState(() => {
-    try { return JSON.parse(localStorage.getItem(STORAGE_KEY+'-set')) || { showWeight: true }; }
-    catch { return { showWeight: true }; }
+    try { return JSON.parse(localStorage.getItem(STORAGE_KEY+'-set')) || { showWeight: true, requireProof: false }; }
+    catch { return { showWeight: true, requireProof: false }; }
   });
   const [isEditing, setIsEditing] = useState(false);
   const [pw, setPw] = useState('');
@@ -537,12 +886,20 @@ export default function App() {
     const currentPhase = td?.phase || 1;
     const currentWeek = td?.weekNumber || 1;
     
+    // Calculate streak with optional proof requirement
     let currentStreak = 0;
     const sorted = days.filter(d => new Date(d.date) <= today).sort((a,b) => new Date(b.date) - new Date(a.date));
     for (const d of sorted) {
       const items = [...(d.activities||[]),...(d.habits||[])];
-      if (items.length === 0 || items.every(x=>x.completed)) { if (items.length) currentStreak++; }
-      else break;
+      const allItemsDone = items.length === 0 || items.every(x=>x.completed);
+      const proofDone = settings.requireProof && !d.isTravel ? 
+        (d.proofFiles?.appleHealth && d.proofFiles?.cronometer) : true;
+      
+      if (allItemsDone && proofDone) { 
+        if (items.length) currentStreak++; 
+      } else {
+        break;
+      }
     }
     
     const past = days.filter(d => new Date(d.date) <= today);
@@ -554,7 +911,7 @@ export default function App() {
     const currentWeight = latestCp ? Number(latestCp[1].weight) : 190;
     
     return { daysRemaining, currentPhase, currentWeek, currentStreak, totalCompletion, currentWeight };
-  }, [days, checkpoints]);
+  }, [days, checkpoints, settings.requireProof]);
   
   const weekGroups = useMemo(() => {
     const g = {};
@@ -571,6 +928,45 @@ export default function App() {
     }));
   };
   
+  const onUploadProof = useCallback((dayId, type, url) => {
+    setDays(prev => prev.map(d => {
+      if (d.id !== dayId) return d;
+      return {
+        ...d,
+        proofFiles: {
+          ...d.proofFiles,
+          [type]: url,
+          uploadedAt: new Date().toISOString()
+        }
+      };
+    }));
+  }, []);
+  
+  const onRemoveProof = useCallback((dayId, type) => {
+    setDays(prev => prev.map(d => {
+      if (d.id !== dayId) return d;
+      return {
+        ...d,
+        proofFiles: {
+          ...d.proofFiles,
+          [type]: null
+        }
+      };
+    }));
+  }, []);
+  
+  const onScrollToDay = useCallback((dayId) => {
+    const dayData = days.find(d => d.id === dayId);
+    if (dayData) {
+      setSelWeek(dayData.weekNumber);
+      // Small delay to let React render the week, then scroll
+      setTimeout(() => {
+        const el = document.querySelector(`[data-day-id="${dayId}"]`);
+        if (el) el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      }, 100);
+    }
+  }, [days]);
+  
   const onSaveCp = (wk, vals) => { setCheckpoints(p => ({...p, [wk]: vals})); setModal(null); };
   const onPw = e => { e.preventDefault(); if (pw === EDIT_PASSWORD) setIsEditing(true); else alert('Wrong'); setPw(''); };
   
@@ -582,6 +978,10 @@ export default function App() {
     <div className="app">
       <Header stats={stats} />
       <Stats stats={stats} />
+      
+      {/* Missing proof alert */}
+      {isEditing && <MissingProofAlert days={days} onScrollToDay={onScrollToDay} />}
+      
       <div className="layout">
         <aside className="side">
           <div className="edit-box">
@@ -593,7 +993,16 @@ export default function App() {
           </div>
           <Weight start={190} current={stats.currentWeight} target={175} show={settings.showWeight} />
           {isEditing && (
-            <label className="toggle"><input type="checkbox" checked={settings.showWeight} onChange={e=>setSettings({...settings,showWeight:e.target.checked})} /> Show weight</label>
+            <div className="settings-toggles">
+              <label className="toggle">
+                <input type="checkbox" checked={settings.showWeight} onChange={e=>setSettings({...settings,showWeight:e.target.checked})} /> 
+                Show weight
+              </label>
+              <label className="toggle">
+                <input type="checkbox" checked={settings.requireProof} onChange={e=>setSettings({...settings,requireProof:e.target.checked})} /> 
+                Proof breaks streak
+              </label>
+            </div>
           )}
           <div className="week-nav">
             <h4>Weeks</h4>
@@ -603,6 +1012,10 @@ export default function App() {
               ))}
             </div>
           </div>
+          
+          {/* Proof calendar grid */}
+          <ProofCalendarGrid days={days} />
+          
           <Checkpoints checkpoints={checkpoints} currentWeek={stats.currentWeek} onLog={setModal} isEditing={isEditing} />
           <Meals />
           <div className="share">
@@ -611,7 +1024,14 @@ export default function App() {
           </div>
         </aside>
         <main className="main">
-          <Week weekNum={displayWeek} days={weekGroups[displayWeek]||[]} isEditing={isEditing} onToggle={onToggle} />
+          <Week 
+            weekNum={displayWeek} 
+            days={weekGroups[displayWeek]||[]} 
+            isEditing={isEditing} 
+            onToggle={onToggle}
+            onUploadProof={onUploadProof}
+            onRemoveProof={onRemoveProof}
+          />
         </main>
       </div>
       {modal && <Modal week={modal} onSave={onSaveCp} onCancel={()=>setModal(null)} />}
