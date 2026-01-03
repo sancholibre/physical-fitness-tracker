@@ -4,6 +4,7 @@
   "description": "FBI PFT Tracker - Alec Santiago's 89-day journey",
   "private": true,
   "dependencies": {
+    "@supabase/supabase-js": "^2.89.0",
     "react": "^18.2.0",
     "react-dom": "^18.2.0",
     "react-scripts": "5.0.1",
