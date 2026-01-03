@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react';
+import { createClient } from '@supabase/supabase-js';
 import './App.css';
 
 // ============================================
@@ -6,12 +7,17 @@ import './App.css';
 // 89 Days to Pass | Jan 2 - April 1, 2026
 // ============================================
 
-const STORAGE_KEY = 'fbi-pft-tracker-alec';
+// Supabase config
+const SUPABASE_URL = 'https://cqpjytbpvmgzziqluhnz.supabase.co';
+const SUPABASE_ANON_KEY = 'sb_publishable_hLb04cYlJp9CASk_jk7pYQ_U43VNPFq';
+const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+
+const USER_ID = 'alec-santiago'; // Single user for now
 const EDIT_PASSWORD = 'agent195';
 
-// Cloudinary config - UPDATE THESE with your actual values
-const CLOUDINARY_CLOUD_NAME = 'djbznowhf'; // TODO: Replace with your Cloudinary cloud name
-const CLOUDINARY_UPLOAD_PRESET = 'fbi_pft_proof'; // Create this unsigned preset in Cloudinary
+// Cloudinary config
+const CLOUDINARY_CLOUD_NAME = 'djbznowhf';
+const CLOUDINARY_UPLOAD_PRESET = 'fbi_pft_proof';
 
 const WEIGHT_START = 190;
 const WEIGHT_TARGET = 178;
@@ -22,6 +28,43 @@ const WEIGHT_TARGET = 178;
 
 function getLocalDateStr(date = new Date()) {
   return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
+}
+
+// ============================================
+// SUPABASE DATA SERVICE
+// ============================================
+
+async function loadStateFromSupabase() {
+  const { data, error } = await supabase
+    .from('tracker_state')
+    .select('*')
+    .eq('user_id', USER_ID)
+    .single();
+  
+  if (error && error.code !== 'PGRST116') { // PGRST116 = no rows returned
+    console.error('Error loading state:', error);
+    return null;
+  }
+  return data;
+}
+
+async function saveStateToSupabase(days, checkpoints, settings, lifts) {
+  const { error } = await supabase
+    .from('tracker_state')
+    .upsert({
+      user_id: USER_ID,
+      days: days,
+      checkpoints: checkpoints,
+      settings: settings,
+      lifts: lifts,
+      updated_at: new Date().toISOString()
+    }, { onConflict: 'user_id' });
+  
+  if (error) {
+    console.error('Error saving state:', error);
+    return false;
+  }
+  return true;
 }
 
 // ============================================
@@ -633,6 +676,25 @@ function MissingProofAlert({ days, onScrollToDay }) {
   );
 }
 
+function SocialLinks() {
+  return (
+    <div className="social-links">
+      <h4>🔗 Connect</h4>
+      <div className="link-list">
+        <a href="https://www.wayfindersalmanac.com" target="_blank" rel="noopener noreferrer" className="social-link">
+          🌐 Check out my website
+        </a>
+        <a href="https://x.com/GroundedSanti" target="_blank" rel="noopener noreferrer" className="social-link">
+          𝕏 Follow me on X
+        </a>
+        <a href="https://www.findtheways.com" target="_blank" rel="noopener noreferrer" className="social-link">
+          ✍️ Read my writing
+        </a>
+      </div>
+    </div>
+  );
+}
+
 function Embed({ stats, days }) {
   const todayStr = getLocalDateStr();
   const recent = days.filter(d => d.date <= todayStr && d.date >= getLocalDateStr(new Date(Date.now() - 7*24*60*60*1000))).reverse();
@@ -663,6 +725,11 @@ function Embed({ stats, days }) {
           );
         })}
       </div>
+      <div className="emb-links">
+        <a href="https://www.wayfindersalmanac.com" target="_blank" rel="noopener noreferrer">🌐 Website</a>
+        <a href="https://x.com/GroundedSanti" target="_blank" rel="noopener noreferrer">𝕏 X</a>
+        <a href="https://www.findtheways.com" target="_blank" rel="noopener noreferrer">✍️ Writing</a>
+      </div>
       <div className="emb-foot"><a href="https://wayfindersalmanac.com">wayfindersalmanac.com</a></div>
     </div>
   );
@@ -673,27 +740,78 @@ function Embed({ stats, days }) {
 // ============================================
 
 export default function App() {
-  const [days, setDays] = useState(() => {
-    try { 
-      const stored = JSON.parse(localStorage.getItem(STORAGE_KEY));
-      if (stored) return stored.map(d => ({ ...d, proofFiles: d.proofFiles || { appleHealth: null, cronometer: null, uploadedAt: null } }));
-      return generateAllDays(); 
-    } catch { return generateAllDays(); }
-  });
-  const [checkpoints, setCheckpoints] = useState(() => { try { return JSON.parse(localStorage.getItem(STORAGE_KEY+'-cp')) || {}; } catch { return {}; } });
-  const [settings, setSettings] = useState(() => { try { return JSON.parse(localStorage.getItem(STORAGE_KEY+'-set')) || { showWeight: true, requireProof: false }; } catch { return { showWeight: true, requireProof: false }; } });
-  const [lifts, setLifts] = useState(() => { try { return JSON.parse(localStorage.getItem(STORAGE_KEY+'-lifts')) || { bench: '225', squat: '315', deadlift: '315', pushups: '35', pullups: '10' }; } catch { return { bench: '225', squat: '315', deadlift: '315', pushups: '35', pullups: '10' }; } });
+  const [days, setDays] = useState(generateAllDays());
+  const [checkpoints, setCheckpoints] = useState({});
+  const [settings, setSettings] = useState({ showWeight: true, requireProof: false });
+  const [lifts, setLifts] = useState({ bench: '225', squat: '315', deadlift: '315', pushups: '35', pullups: '10' });
   const [isEditing, setIsEditing] = useState(false);
   const [pw, setPw] = useState('');
   const [modal, setModal] = useState(null);
   const [selWeek, setSelWeek] = useState(null);
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
+  const [lastSaved, setLastSaved] = useState(null);
   
   const isEmbed = window.location.search.includes('embed=true') || window.location.pathname.includes('/embed');
   
-  useEffect(() => { localStorage.setItem(STORAGE_KEY, JSON.stringify(days)); }, [days]);
-  useEffect(() => { localStorage.setItem(STORAGE_KEY+'-cp', JSON.stringify(checkpoints)); }, [checkpoints]);
-  useEffect(() => { localStorage.setItem(STORAGE_KEY+'-set', JSON.stringify(settings)); }, [settings]);
-  useEffect(() => { localStorage.setItem(STORAGE_KEY+'-lifts', JSON.stringify(lifts)); }, [lifts]);
+  // Load from Supabase on mount
+  useEffect(() => {
+    async function loadData() {
+      setLoading(true);
+      const stored = await loadStateFromSupabase();
+      if (stored) {
+        if (stored.days) {
+          // Merge stored days with generated days (in case schema changed)
+          const generated = generateAllDays();
+          const merged = generated.map(genDay => {
+            const storedDay = stored.days.find(d => d.id === genDay.id);
+            if (storedDay) {
+              return {
+                ...genDay,
+                activities: genDay.activities.map((act, i) => ({
+                  ...act,
+                  completed: storedDay.activities?.[i]?.completed || false
+                })),
+                habits: genDay.habits.map((hab, i) => ({
+                  ...hab,
+                  completed: storedDay.habits?.[i]?.completed || false
+                })),
+                proofFiles: storedDay.proofFiles || genDay.proofFiles,
+                notes: storedDay.notes || ''
+              };
+            }
+            return genDay;
+          });
+          setDays(merged);
+        }
+        if (stored.checkpoints) setCheckpoints(stored.checkpoints);
+        if (stored.settings) setSettings(stored.settings);
+        if (stored.lifts) setLifts(stored.lifts);
+        setLastSaved(stored.updated_at);
+      }
+      setLoading(false);
+    }
+    loadData();
+  }, []);
+  
+  // Save to Supabase when state changes (debounced, only in edit mode)
+  const saveTimeoutRef = useRef(null);
+  useEffect(() => {
+    if (loading || !isEditing) return;
+    
+    if (saveTimeoutRef.current) clearTimeout(saveTimeoutRef.current);
+    
+    saveTimeoutRef.current = setTimeout(async () => {
+      setSaving(true);
+      const success = await saveStateToSupabase(days, checkpoints, settings, lifts);
+      if (success) setLastSaved(new Date().toISOString());
+      setSaving(false);
+    }, 1000); // 1 second debounce
+    
+    return () => {
+      if (saveTimeoutRef.current) clearTimeout(saveTimeoutRef.current);
+    };
+  }, [days, checkpoints, settings, lifts, loading, isEditing]);
   
   const stats = useMemo(() => {
     const today = new Date();
@@ -734,6 +852,17 @@ export default function App() {
   const onSaveCp = (wk, vals) => { setCheckpoints(p => ({...p, [wk]: vals})); setModal(null); };
   const onPw = e => { e.preventDefault(); if (pw === EDIT_PASSWORD) setIsEditing(true); else alert('Wrong'); setPw(''); };
   
+  if (loading) {
+    return (
+      <div className="app loading-screen">
+        <div className="loading-content">
+          <span className="loading-icon">🎯</span>
+          <h2>Loading tracker...</h2>
+        </div>
+      </div>
+    );
+  }
+  
   if (isEmbed) return <Embed stats={stats} days={days} />;
   
   const displayWeek = selWeek || stats.currentWeek;
@@ -742,6 +871,7 @@ export default function App() {
     <div className="app">
       <Header stats={stats} />
       <Stats stats={stats} />
+      {saving && <div className="save-indicator">💾 Saving...</div>}
       {isEditing && <MissingProofAlert days={days} onScrollToDay={onScrollToDay} />}
       <div className="layout">
         <aside className="side">
@@ -749,6 +879,7 @@ export default function App() {
             {isEditing ? <div className="editing"><span>✏️ Editing</span><button onClick={() => setIsEditing(false)}>Lock</button></div>
                        : <form onSubmit={onPw}><input type="password" placeholder="Password" value={pw} onChange={e=>setPw(e.target.value)} /><button>Unlock</button></form>}
           </div>
+          {lastSaved && <div className="last-saved">Last saved: {new Date(lastSaved).toLocaleString()}</div>}
           <Weight current={stats.currentWeight} show={settings.showWeight} />
           {isEditing && (
             <div className="settings-toggles">
@@ -763,6 +894,7 @@ export default function App() {
           <Meals />
           <PhaseInfo />
           <div className="share"><h4>📤 Embed</h4><code>?embed=true</code></div>
+          <SocialLinks />
         </aside>
         <main className="main"><Week weekNum={displayWeek} days={weekGroups[displayWeek]||[]} isEditing={isEditing} onToggle={onToggle} onUploadProof={onUploadProof} onRemoveProof={onRemoveProof} /></main>
       </div>

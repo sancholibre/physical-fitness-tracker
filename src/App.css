@@ -258,3 +258,120 @@ body {
   .stats-bar { flex-wrap: wrap; gap: 1rem; }
   .proof-uploads { grid-template-columns: 1fr; }
 }
+/* Add these styles to your existing App.css */
+
+/* Loading Screen */
+.loading-screen {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 100vh;
+  background: #0a0a0b;
+}
+
+.loading-content {
+  text-align: center;
+}
+
+.loading-icon {
+  font-size: 4rem;
+  display: block;
+  margin-bottom: 1rem;
+  animation: pulse 1.5s ease-in-out infinite;
+}
+
+@keyframes pulse {
+  0%, 100% { opacity: 1; transform: scale(1); }
+  50% { opacity: 0.7; transform: scale(1.1); }
+}
+
+.loading-content h2 {
+  color: #888;
+  font-weight: 400;
+}
+
+/* Save Indicator */
+.save-indicator {
+  position: fixed;
+  top: 80px;
+  right: 20px;
+  background: #1a1a1c;
+  border: 1px solid #333;
+  padding: 8px 16px;
+  border-radius: 6px;
+  font-size: 0.85rem;
+  color: #22c55e;
+  z-index: 1000;
+  animation: fadeIn 0.2s ease;
+}
+
+@keyframes fadeIn {
+  from { opacity: 0; transform: translateY(-10px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+/* Last Saved */
+.last-saved {
+  font-size: 0.75rem;
+  color: #666;
+  padding: 8px 12px;
+  text-align: center;
+  border-bottom: 1px solid #222;
+}
+
+/* Social Links */
+.social-links {
+  padding: 16px;
+  border-top: 1px solid #222;
+}
+
+.social-links h4 {
+  font-size: 0.9rem;
+  color: #888;
+  margin-bottom: 12px;
+}
+
+.link-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.social-link {
+  display: block;
+  padding: 10px 12px;
+  background: #1a1a1c;
+  border: 1px solid #2a2a2c;
+  border-radius: 6px;
+  color: #ccc;
+  text-decoration: none;
+  font-size: 0.85rem;
+  transition: all 0.2s ease;
+}
+
+.social-link:hover {
+  background: #222;
+  border-color: #444;
+  color: #fff;
+}
+
+/* Embed Social Links */
+.emb-links {
+  display: flex;
+  justify-content: center;
+  gap: 16px;
+  padding: 12px;
+  border-top: 1px solid #222;
+  margin-top: 8px;
+}
+
+.emb-links a {
+  color: #888;
+  text-decoration: none;
+  font-size: 0.8rem;
+  transition: color 0.2s;
+}
+
+.emb-links a:hover {
+  color: #22c55e;
+}
