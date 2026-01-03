@@ -10,8 +10,19 @@ const STORAGE_KEY = 'fbi-pft-tracker-alec';
 const EDIT_PASSWORD = 'agent195';
 
 // Cloudinary config - UPDATE THESE with your actual values
-const CLOUDINARY_CLOUD_NAME = 'djbznowhf'; // TODO: Replace with your Cloudinary cloud name
+const CLOUDINARY_CLOUD_NAME = 'your-cloud-name'; // TODO: Replace with your Cloudinary cloud name
 const CLOUDINARY_UPLOAD_PRESET = 'fbi_pft_proof'; // Create this unsigned preset in Cloudinary
+
+const WEIGHT_START = 190;
+const WEIGHT_TARGET = 178;
+
+// ============================================
+// HELPER FUNCTIONS
+// ============================================
+
+function getLocalDateStr(date = new Date()) {
+  return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
+}
 
 // ============================================
 // CLOUDINARY UPLOAD SERVICE
@@ -119,7 +130,7 @@ function generateAllDays() {
     // Daily habits (skip pure travel days)
     if (!day.isTravel) {
       day.habits = [
-        { id: 'protein', name: 'Protein 195g+', completed: false },
+        { id: 'protein', name: 'Protein 185g+', completed: false },
         { id: 'calories', name: 'Calorie Target', completed: false },
         { id: 'water', name: 'Water 1gal', completed: false },
         { id: 'sleep', name: 'Sleep 7+hrs', completed: false },
@@ -135,40 +146,24 @@ function generateAllDays() {
 
 function getConferenceDayActivities(dateStr) {
   const map = {
-    '2026-01-13': [
-      { id: 'z2-1', type: 'zone2', name: '🏃 Zone 2 - 40min (Embarcadero, before conference)', completed: false },
-    ],
-    '2026-01-14': [
-      { id: 'lift-1', type: 'lifting', name: '🏋️ Lower Body - Fitness SF SOMA (Squat 3x5, RDL 2x6)', completed: false },
-    ],
-    '2026-01-15': [
-      { id: 'z2-2', type: 'zone2', name: '🏃 Zone 2 - 45min (Embarcadero)', completed: false },
-    ],
-    '2026-01-16': [
-      { id: 'lift-2', type: 'lifting', name: '🏋️ Upper Pull - Fitness SF SOMA (Pull-ups 4x6, Rows 3x6)', completed: false },
-    ],
+    '2026-01-13': [{ id: 'z2-1', type: 'zone2', name: '🏃 Zone 2 - 40min (Embarcadero, before conference)', completed: false }],
+    '2026-01-14': [{ id: 'lift-1', type: 'lifting', name: '🏋️ Lower Body - Fitness SF SOMA (Squat 3x5, RDL 2x6)', completed: false }],
+    '2026-01-15': [{ id: 'z2-2', type: 'zone2', name: '🏃 Zone 2 - 45min (Embarcadero)', completed: false }],
+    '2026-01-16': [{ id: 'lift-2', type: 'lifting', name: '🏋️ Upper Pull - Fitness SF SOMA (Pull-ups 4x6, Rows 3x6)', completed: false }],
   };
   return map[dateStr] || [];
 }
 
 function getVacationDayActivities(dateStr) {
   const map = {
-    '2026-01-17': [
-      { id: 'z2-3', type: 'zone2', name: '🏃 Zone 2 - 30min (Explore the Panhandle!)', completed: false },
-    ],
-    '2026-01-18': [
-      { id: 'int-1', type: 'intervals', name: '🔥 Intervals - 6x400m (Golden Gate Park)', completed: false },
-    ],
-    '2026-01-19': [
-      { id: 'rest-1', type: 'rest', name: '😴 Full Rest - Enjoy SF!', completed: false },
-    ],
+    '2026-01-17': [{ id: 'z2-3', type: 'zone2', name: '🏃 Zone 2 - 30min (Explore the Panhandle!)', completed: false }],
+    '2026-01-18': [{ id: 'int-1', type: 'intervals', name: '🔥 Intervals - 6x400m (Golden Gate Park)', completed: false }],
+    '2026-01-19': [{ id: 'rest-1', type: 'rest', name: '😴 Full Rest - Enjoy SF!', completed: false }],
     '2026-01-20': [
       { id: 'z2-4', type: 'zone2', name: '🏃 Zone 2 - 45min (Golden Gate Park)', completed: false },
       { id: 'lift-3', type: 'lifting', name: '🏋️ Upper Push - Fitness SF Castro', completed: false },
     ],
-    '2026-01-21': [
-      { id: 'tempo-1', type: 'tempo', name: '🏃 Tempo - 20min @ 8:30 (Panhandle)', completed: false },
-    ],
+    '2026-01-21': [{ id: 'tempo-1', type: 'tempo', name: '🏃 Tempo - 20min @ 8:30 (Panhandle)', completed: false }],
   };
   return map[dateStr] || [];
 }
@@ -177,15 +172,11 @@ function getRegularActivities(dow, weekNum, phase) {
   const intervalDetail = getIntervalDetail(weekNum, phase);
   const tempoDetail = getTempoDetail(weekNum, phase);
   
-  // PHASE 3 TAPER
   if (phase === 3) {
     if (weekNum === 11) {
       const w11 = {
         0: [{ id: 'rest', type: 'rest', name: '😴 Full Rest', completed: false }],
-        1: [
-          { id: 'z2', type: 'zone2', name: '🏃 Zone 2 - 30min (easy)', completed: false },
-          { id: 'lift', type: 'lifting', name: '🏋️ Upper Push (Light)', completed: false },
-        ],
+        1: [{ id: 'z2', type: 'zone2', name: '🏃 Zone 2 - 30min (easy)', completed: false }, { id: 'lift', type: 'lifting', name: '🏋️ Upper Push (Light)', completed: false }],
         2: [{ id: 'lift', type: 'lifting', name: '🏋️ Lower (2 sets each)', completed: false }],
         3: [{ id: 'z2', type: 'zone2', name: '🏃 Zone 2 - 30min', completed: false }],
         4: [{ id: 'lift', type: 'lifting', name: '🏋️ Upper Pull (Light)', completed: false }],
@@ -208,7 +199,6 @@ function getRegularActivities(dow, weekNum, phase) {
     }
   }
   
-  // TIME TRIALS in Phase 2
   if (phase === 2 && dow === 3 && (weekNum === 8 || weekNum === 10)) {
     return [
       { id: 'tt', type: 'timetrial', name: '⏱️ 1.5mi TIME TRIAL', completed: false },
@@ -216,7 +206,6 @@ function getRegularActivities(dow, weekNum, phase) {
     ];
   }
   
-  // REGULAR SCHEDULE
   const schedule = {
     0: [{ id: 'rest', type: 'rest', name: '😴 Full Rest Day', completed: false }],
     1: [
@@ -224,17 +213,13 @@ function getRegularActivities(dow, weekNum, phase) {
       { id: 'lift', type: 'lifting', name: '🏋️ Upper Push (Bench 3x5, OHP 3x6, Dips 2x10)', completed: false },
       { id: 'gtg', type: 'gtg', name: '💪 Push-up GTG (4 sets)', completed: false },
     ],
-    2: [
-      { id: 'lift', type: 'lifting', name: '🏋️ Lower (Squat 3x5, RDL 3x8, BSS 2x8)', completed: false },
-    ],
+    2: [{ id: 'lift', type: 'lifting', name: '🏋️ Lower (Squat 3x5, RDL 3x8, BSS 2x8)', completed: false }],
     3: [
       { id: 'z2', type: 'zone2', name: '🏃 Zone 2 - 50min', completed: false },
       { id: 'strides', type: 'strides', name: '🏃 Strides - 4x100m after', completed: false },
       { id: 'gtg', type: 'gtg', name: '💪 Push-up GTG (4 sets)', completed: false },
     ],
-    4: [
-      { id: 'lift', type: 'lifting', name: '🏋️ Upper Pull (Pull-ups 4x8, Row 3x8)', completed: false },
-    ],
+    4: [{ id: 'lift', type: 'lifting', name: '🏋️ Upper Pull (Pull-ups 4x8, Row 3x8)', completed: false }],
     5: [
       { id: 'int', type: 'intervals', name: `🔥 Intervals - ${intervalDetail}`, completed: false },
       { id: 'gtg', type: 'gtg', name: '💪 Push-up GTG (4 sets)', completed: false },
@@ -279,8 +264,8 @@ const CHECKPOINT_TARGETS = {
   4: { run: '11:50', pushups: 41, pullups: 11, sprint: '50.0', weight: 185 },
   6: { run: '11:35', pushups: 44, pullups: 11, sprint: '49.5', weight: 183 },
   8: { run: '11:20', pushups: 47, pullups: 12, sprint: '49.0', weight: 180 },
-  10: { run: '11:05', pushups: 50, pullups: 12, sprint: '48.5', weight: 178 },
-  12: { run: '<11:00', pushups: '50+', pullups: 12, sprint: '<49', weight: 175 },
+  10: { run: '11:05', pushups: 50, pullups: 12, sprint: '48.5', weight: 179 },
+  12: { run: '<11:00', pushups: '50+', pullups: 12, sprint: '<49', weight: 178 },
 };
 
 const MEALS = {
@@ -353,10 +338,6 @@ function Stats({ stats }) {
   );
 }
 
-// ============================================
-// FILE UPLOAD COMPONENT
-// ============================================
-
 function FileUpload({ dayId, type, currentUrl, onUpload, onRemove, isEditing }) {
   const [uploading, setUploading] = useState(false);
   const [progress, setProgress] = useState(0);
@@ -369,57 +350,20 @@ function FileUpload({ dayId, type, currentUrl, onUpload, onRemove, isEditing }) 
   
   const handleFile = useCallback(async (file) => {
     if (!file) return;
-    
-    // Validate file size (5MB max)
-    if (file.size > 5 * 1024 * 1024) {
-      setError('File too large (max 5MB)');
-      return;
-    }
-    
-    setUploading(true);
-    setProgress(0);
-    setError(null);
-    
+    if (file.size > 5 * 1024 * 1024) { setError('File too large (max 5MB)'); return; }
+    setUploading(true); setProgress(0); setError(null);
     try {
       const url = await uploadWithRetry(file, setProgress);
       onUpload(dayId, type, url);
-    } catch (err) {
-      setError('Upload failed. Try again.');
-      console.error('Upload error:', err);
-    } finally {
-      setUploading(false);
-      setProgress(0);
-    }
+    } catch (err) { setError('Upload failed. Try again.'); console.error('Upload error:', err); }
+    finally { setUploading(false); setProgress(0); }
   }, [dayId, type, onUpload]);
   
-  const handleDrop = useCallback((e) => {
-    e.preventDefault();
-    setDragOver(false);
-    if (!isEditing) return;
-    const file = e.dataTransfer.files[0];
-    handleFile(file);
-  }, [isEditing, handleFile]);
-  
-  const handleDragOver = useCallback((e) => {
-    e.preventDefault();
-    if (isEditing) setDragOver(true);
-  }, [isEditing]);
-  
-  const handleDragLeave = useCallback(() => {
-    setDragOver(false);
-  }, []);
-  
-  const handleInputChange = useCallback((e) => {
-    const file = e.target.files[0];
-    handleFile(file);
-    e.target.value = ''; // Reset input
-  }, [handleFile]);
-  
-  const handleRemove = useCallback(() => {
-    if (window.confirm('Remove this proof file?')) {
-      onRemove(dayId, type);
-    }
-  }, [dayId, type, onRemove]);
+  const handleDrop = useCallback((e) => { e.preventDefault(); setDragOver(false); if (!isEditing) return; handleFile(e.dataTransfer.files[0]); }, [isEditing, handleFile]);
+  const handleDragOver = useCallback((e) => { e.preventDefault(); if (isEditing) setDragOver(true); }, [isEditing]);
+  const handleDragLeave = useCallback(() => { setDragOver(false); }, []);
+  const handleInputChange = useCallback((e) => { handleFile(e.target.files[0]); e.target.value = ''; }, [handleFile]);
+  const handleRemove = useCallback(() => { if (window.confirm('Remove this proof file?')) onRemove(dayId, type); }, [dayId, type, onRemove]);
   
   const isPdf = currentUrl?.toLowerCase().includes('.pdf');
   
@@ -427,85 +371,37 @@ function FileUpload({ dayId, type, currentUrl, onUpload, onRemove, isEditing }) 
     return (
       <div className="proof-uploaded">
         <span className="proof-label">{label}</span>
-        {isPdf ? (
-          <a href={currentUrl} target="_blank" rel="noopener noreferrer" className="proof-link">
-            📄 View PDF
-          </a>
-        ) : (
-          <a href={currentUrl} target="_blank" rel="noopener noreferrer" className="proof-thumb-link">
-            <img src={currentUrl} alt={label} className="proof-thumb" loading="lazy" />
-          </a>
-        )}
-        {isEditing && (
-          <button className="proof-remove" onClick={handleRemove} title="Remove">×</button>
-        )}
+        {isPdf ? <a href={currentUrl} target="_blank" rel="noopener noreferrer" className="proof-link">📄 View PDF</a>
+               : <a href={currentUrl} target="_blank" rel="noopener noreferrer" className="proof-thumb-link"><img src={currentUrl} alt={label} className="proof-thumb" loading="lazy" /></a>}
+        {isEditing && <button className="proof-remove" onClick={handleRemove} title="Remove">×</button>}
       </div>
     );
   }
   
-  if (!isEditing) {
-    return (
-      <div className="proof-missing">
-        <span className="proof-label">{label}</span>
-        <span className="proof-status missing">❌</span>
-      </div>
-    );
-  }
+  if (!isEditing) return <div className="proof-missing"><span className="proof-label">{label}</span><span className="proof-status missing">❌</span></div>;
   
   return (
-    <div 
-      className={`proof-dropzone ${dragOver ? 'drag-over' : ''} ${uploading ? 'uploading' : ''}`}
-      onDrop={handleDrop}
-      onDragOver={handleDragOver}
-      onDragLeave={handleDragLeave}
-      onClick={() => !uploading && inputRef.current?.click()}
-    >
-      <input
-        ref={inputRef}
-        type="file"
-        accept={accept}
-        onChange={handleInputChange}
-        style={{ display: 'none' }}
-      />
+    <div className={`proof-dropzone ${dragOver ? 'drag-over' : ''} ${uploading ? 'uploading' : ''}`} onDrop={handleDrop} onDragOver={handleDragOver} onDragLeave={handleDragLeave} onClick={() => !uploading && inputRef.current?.click()}>
+      <input ref={inputRef} type="file" accept={accept} onChange={handleInputChange} style={{ display: 'none' }} />
       <span className="proof-label">{label}</span>
-      {uploading ? (
-        <div className="upload-progress">
-          <div className="progress-bar">
-            <div className="progress-fill" style={{ width: `${progress}%` }}></div>
-          </div>
-          <span className="progress-text">{progress}%</span>
-        </div>
-      ) : (
-        <span className="proof-prompt">Drop or tap</span>
-      )}
+      {uploading ? <div className="upload-progress"><div className="progress-bar"><div className="progress-fill" style={{ width: `${progress}%` }}></div></div><span className="progress-text">{progress}%</span></div> : <span className="proof-prompt">Drop or tap</span>}
       {error && <span className="proof-error">{error}</span>}
     </div>
   );
 }
 
-// ============================================
-// PROOF STATUS COMPONENTS
-// ============================================
-
 function ProofStatusBadge({ day }) {
   const hasHealth = !!day.proofFiles?.appleHealth;
   const hasCrono = !!day.proofFiles?.cronometer;
-  const complete = hasHealth && hasCrono;
-  
-  if (complete) {
-    return <span className="proof-badge complete" title="Proof uploaded">📸✓</span>;
-  }
-  if (hasHealth || hasCrono) {
-    return <span className="proof-badge partial" title="Partial proof">{hasHealth ? '📱' : ''}{hasCrono ? '🥗' : ''}</span>;
-  }
+  if (hasHealth && hasCrono) return <span className="proof-badge complete" title="Proof uploaded">📸✓</span>;
+  if (hasHealth || hasCrono) return <span className="proof-badge partial" title="Partial proof">{hasHealth ? '📱' : ''}{hasCrono ? '🥗' : ''}</span>;
   return null;
 }
 
 function ProofCalendarGrid({ days }) {
   const weeks = [];
-  for (let i = 0; i < days.length; i += 7) {
-    weeks.push(days.slice(i, i + 7));
-  }
+  for (let i = 0; i < days.length; i += 7) weeks.push(days.slice(i, i + 7));
+  const todayStr = getLocalDateStr();
   
   return (
     <div className="proof-calendar">
@@ -516,23 +412,17 @@ function ProofCalendarGrid({ days }) {
             <span className="pw-label">W{wi + 1}</span>
             <div className="pw-days">
               {week.map(day => {
-                const isPast = new Date(day.date) < new Date(new Date().toDateString());
+                const isPast = day.date < todayStr;
                 const hasHealth = !!day.proofFiles?.appleHealth;
                 const hasCrono = !!day.proofFiles?.cronometer;
                 const complete = hasHealth && hasCrono;
                 const partial = hasHealth || hasCrono;
-                
                 let cls = 'pd';
                 if (!isPast) cls += ' future';
                 else if (complete) cls += ' complete';
                 else if (partial) cls += ' partial';
                 else cls += ' missing';
-                
-                return (
-                  <span key={day.id} className={cls} title={day.date}>
-                    {complete ? '✓' : partial ? (hasHealth ? '📱' : '🥗') : isPast ? '❌' : '○'}
-                  </span>
-                );
+                return <span key={day.id} className={cls} title={day.date}>{complete ? '✓' : partial ? (hasHealth ? '📱' : '🥗') : isPast ? '❌' : '○'}</span>;
               })}
             </div>
           </div>
@@ -542,21 +432,54 @@ function ProofCalendarGrid({ days }) {
   );
 }
 
-// ============================================
-// DAY CARD COMPONENT
-// ============================================
+function LiftTracker({ lifts, onUpdate, isEditing }) {
+  const liftItems = [
+    { id: 'bench', label: 'Bench', icon: '🏋️' },
+    { id: 'squat', label: 'Squat', icon: '🦵' },
+    { id: 'deadlift', label: 'Deadlift', icon: '💪' },
+    { id: 'pushups', label: 'Push-Ups', icon: '👐' },
+    { id: 'pullups', label: 'Pull-Ups', icon: '🔝' },
+  ];
+  
+  return (
+    <div className="lift-tracker">
+      <h3>🏋️ Current Maxes</h3>
+      <div className="lift-grid">
+        {liftItems.map(item => (
+          <div key={item.id} className="lift-item">
+            <span className="lift-label">{item.icon} {item.label}</span>
+            {isEditing ? <input type="text" className="lift-input" value={lifts[item.id] || ''} onChange={(e) => onUpdate(item.id, e.target.value)} placeholder="—" />
+                       : <span className="lift-value">{lifts[item.id] || '—'}</span>}
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function PhaseInfo() {
+  return (
+    <div className="phase-info">
+      <h3>📋 Training Phases</h3>
+      <div className="phase-list">
+        <div className="phase-item"><span className="phase-num">P1</span><div className="phase-details"><span className="phase-name">Base Building</span><span className="phase-desc">Weeks 1-6 • Zone 2 volume, heavy lifts, push-up GTG</span></div></div>
+        <div className="phase-item"><span className="phase-num">P2</span><div className="phase-details"><span className="phase-name">Sharpening</span><span className="phase-desc">Weeks 7-10 • Faster intervals, time trials, tempo runs</span></div></div>
+        <div className="phase-item"><span className="phase-num">P3</span><div className="phase-details"><span className="phase-name">Taper</span><span className="phase-desc">Weeks 11-12 • Reduced volume, maintain intensity, peak fresh</span></div></div>
+      </div>
+    </div>
+  );
+}
 
 function DayCard({ day, isToday, isEditing, onToggle, onUploadProof, onRemoveProof }) {
   const dt = new Date(day.date + 'T12:00:00');
   const dayName = dt.toLocaleDateString('en-US', { weekday: 'short' });
   const monthDay = dt.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
-  
   const items = [...(day.activities || []), ...(day.habits || [])];
   const done = items.filter(x => x.completed).length;
   const total = items.length;
   const pct = total > 0 ? Math.round((done / total) * 100) : 0;
-  const isPast = new Date(day.date) < new Date(new Date().toDateString());
-  
+  const todayStr = getLocalDateStr();
+  const isPast = day.date < todayStr;
   const hasAllProof = day.proofFiles?.appleHealth && day.proofFiles?.cronometer;
   
   let cardClass = 'day-card';
@@ -568,70 +491,39 @@ function DayCard({ day, isToday, isEditing, onToggle, onUploadProof, onRemovePro
   if (isPast && pct === 0 && total > 0) cardClass += ' missed';
   
   return (
-    <div className={cardClass}>
+    <div className={cardClass} data-day-id={day.id}>
       <div className="day-head">
-        <div className="day-dt">
-          <span className="dn">{dayName}</span>
-          <span className="md">{monthDay}</span>
-        </div>
+        <div className="day-dt"><span className="dn">{dayName}</span><span className="md">{monthDay}</span></div>
         {day.location !== 'Denver' && <span className="loc">📍{day.location}</span>}
         {isToday && <span className="badge today">TODAY</span>}
         {day.isCheckpoint && <span className="badge cp">📊</span>}
         {hasAllProof && <ProofStatusBadge day={day} />}
         {total > 0 && <span className={`score ${pct === 100 ? 'full' : ''}`}>{done}/{total}</span>}
       </div>
-      
       <div className="day-body">
         {day.activities?.map((a, i) => (
-          <div 
-            key={a.id || i}
-            className={`item ${a.completed ? 'done' : ''} t-${a.type}`}
-            onClick={() => isEditing && onToggle(day.id, 'activities', i)}
-          >
-            <span className="chk">{a.completed ? '✓' : '○'}</span>
-            <span className="nm">{a.name}</span>
+          <div key={a.id || i} className={`item ${a.completed ? 'done' : ''} t-${a.type}`} onClick={() => isEditing && onToggle(day.id, 'activities', i)}>
+            <span className="chk">{a.completed ? '✓' : '○'}</span><span className="nm">{a.name}</span>
           </div>
         ))}
-        
         {day.habits?.length > 0 && (
           <div className="habits">
             <div className="hab-label">Daily</div>
             <div className="hab-grid">
               {day.habits.map((h, i) => (
-                <div 
-                  key={h.id || i}
-                  className={`hab ${h.completed ? 'done' : ''}`}
-                  onClick={() => isEditing && onToggle(day.id, 'habits', i)}
-                >
-                  <span className="hchk">{h.completed ? '✓' : '○'}</span>
-                  <span className="hnm">{h.name}</span>
+                <div key={h.id || i} className={`hab ${h.completed ? 'done' : ''}`} onClick={() => isEditing && onToggle(day.id, 'habits', i)}>
+                  <span className="hchk">{h.completed ? '✓' : '○'}</span><span className="hnm">{h.name}</span>
                 </div>
               ))}
             </div>
           </div>
         )}
-        
-        {/* PROOF UPLOAD SECTION */}
         {!day.isTravel && (
           <div className="proof-section">
             <div className="proof-label-row">📸 Daily Proof</div>
             <div className="proof-uploads">
-              <FileUpload
-                dayId={day.id}
-                type="appleHealth"
-                currentUrl={day.proofFiles?.appleHealth}
-                onUpload={onUploadProof}
-                onRemove={onRemoveProof}
-                isEditing={isEditing}
-              />
-              <FileUpload
-                dayId={day.id}
-                type="cronometer"
-                currentUrl={day.proofFiles?.cronometer}
-                onUpload={onUploadProof}
-                onRemove={onRemoveProof}
-                isEditing={isEditing}
-              />
+              <FileUpload dayId={day.id} type="appleHealth" currentUrl={day.proofFiles?.appleHealth} onUpload={onUploadProof} onRemove={onRemoveProof} isEditing={isEditing} />
+              <FileUpload dayId={day.id} type="cronometer" currentUrl={day.proofFiles?.cronometer} onUpload={onUploadProof} onRemove={onRemoveProof} isEditing={isEditing} />
             </div>
           </div>
         )}
@@ -641,28 +533,12 @@ function DayCard({ day, isToday, isEditing, onToggle, onUploadProof, onRemovePro
 }
 
 function Week({ weekNum, days, isEditing, onToggle, onUploadProof, onRemoveProof }) {
-  const today = new Date().toISOString().split('T')[0];
+  const todayStr = getLocalDateStr();
   const phase = days[0]?.phase || 1;
-  
   return (
     <div className="week">
-      <div className="week-head">
-        <h2>Week {weekNum}</h2>
-        <span className="ph">Phase {phase}: {phase === 1 ? 'Base Building' : phase === 2 ? 'Sharpening' : 'Taper'}</span>
-      </div>
-      <div className="week-days">
-        {days.map(d => (
-          <DayCard 
-            key={d.id} 
-            day={d} 
-            isToday={d.date === today} 
-            isEditing={isEditing} 
-            onToggle={onToggle}
-            onUploadProof={onUploadProof}
-            onRemoveProof={onRemoveProof}
-          />
-        ))}
-      </div>
+      <div className="week-head"><h2>Week {weekNum}</h2><span className="ph">Phase {phase}: {phase === 1 ? 'Base Building' : phase === 2 ? 'Sharpening' : 'Taper'}</span></div>
+      <div className="week-days">{days.map(d => <DayCard key={d.id} day={d} isToday={d.date === todayStr} isEditing={isEditing} onToggle={onToggle} onUploadProof={onUploadProof} onRemoveProof={onRemoveProof} />)}</div>
     </div>
   );
 }
@@ -678,16 +554,8 @@ function Checkpoints({ checkpoints, currentWeek, onLog, isEditing }) {
         return (
           <div key={w} className={`cp-row ${a ? 'logged' : ''}`}>
             <div className="cp-wk">Week {w}</div>
-            {a ? (
-              <span className="cp-done">✓</span>
-            ) : past && isEditing ? (
-              <button className="cp-btn" onClick={() => onLog(w)}>Log</button>
-            ) : null}
-            <div className="cp-tgts">
-              <span>Run: {t.run}</span>
-              <span>Push: {t.pushups}</span>
-              <span>Pull: {t.pullups}</span>
-            </div>
+            {a ? <span className="cp-done">✓</span> : past && isEditing ? <button className="cp-btn" onClick={() => onLog(w)}>Log</button> : null}
+            <div className="cp-tgts"><span>Run: {t.run}</span><span>Push: {t.pushups}</span><span>Pull: {t.pullups}</span></div>
           </div>
         );
       })}
@@ -695,19 +563,21 @@ function Checkpoints({ checkpoints, currentWeek, onLog, isEditing }) {
   );
 }
 
-function Weight({ start, current, target, show }) {
+function Weight({ current, show }) {
   if (!show) return null;
-  const lost = start - current;
-  const pct = Math.min(Math.max((lost / (start - target)) * 100, 0), 100);
+  const lost = WEIGHT_START - current;
+  const toGo = current - WEIGHT_TARGET;
+  const pct = Math.min(Math.max((lost / (WEIGHT_START - WEIGHT_TARGET)) * 100, 0), 100);
   return (
     <div className="weight">
-      <h3>⚖️ Progress</h3>
+      <h3>⚖️ Weight Loss Progress</h3>
       <div className="wt-stats">
-        <div><span className="wv">{lost > 0 ? lost : 0}</span><span className="wl">lost</span></div>
-        <div><span className="wv">{current}</span><span className="wl">now</span></div>
-        <div><span className="wv">{target - current > 0 ? target - current : 0}</span><span className="wl">to go</span></div>
+        <div><span className="wv">{lost > 0 ? lost : 0}</span><span className="wl">lbs lost</span></div>
+        <div><span className="wv">{current}</span><span className="wl">lbs now</span></div>
+        <div><span className="wv">{toGo > 0 ? toGo : 0}</span><span className="wl">lbs to go</span></div>
       </div>
       <div className="wt-bar"><div className="wt-fill" style={{ width: `${pct}%` }}></div></div>
+      <div className="wt-range"><span>{WEIGHT_START} lbs</span><span>→</span><span>{WEIGHT_TARGET} lbs</span></div>
     </div>
   );
 }
@@ -719,13 +589,8 @@ function Meals() {
       <button onClick={() => setOpen(!open)}>🍽️ Meal Ideas (Pescatarian) {open ? '▼' : '▶'}</button>
       {open && (
         <div className="meal-list">
-          <p className="note">⚠️ No salmon (allergy) • No meat • Target: 195g protein</p>
-          {Object.entries(MEALS).map(([cat, items]) => (
-            <div key={cat} className="meal-cat">
-              <h4>{cat}</h4>
-              <ul>{items.map((m, i) => <li key={i}>{m}</li>)}</ul>
-            </div>
-          ))}
+          <p className="note">⚠️ No salmon (allergy) • No meat • Target: 185g protein</p>
+          {Object.entries(MEALS).map(([cat, items]) => <div key={cat} className="meal-cat"><h4>{cat}</h4><ul>{items.map((m, i) => <li key={i}>{m}</li>)}</ul></div>)}
         </div>
       )}
     </div>
@@ -742,64 +607,38 @@ function Modal({ week, onSave, onCancel }) {
         <label>Push-ups<input type="number" value={v.pushups} onChange={e => setV({...v, pushups: e.target.value})} /></label>
         <label>Pull-ups<input type="number" value={v.pullups} onChange={e => setV({...v, pullups: e.target.value})} /></label>
         <label>Sprint (s)<input value={v.sprint} onChange={e => setV({...v, sprint: e.target.value})} /></label>
-        <label>Weight<input type="number" value={v.weight} onChange={e => setV({...v, weight: e.target.value})} /></label>
-        <div className="modal-btns">
-          <button onClick={onCancel}>Cancel</button>
-          <button className="save" onClick={() => onSave(week, v)}>Save</button>
-        </div>
+        <label>Weight (lbs)<input type="number" value={v.weight} onChange={e => setV({...v, weight: e.target.value})} /></label>
+        <div className="modal-btns"><button onClick={onCancel}>Cancel</button><button className="save" onClick={() => onSave(week, v)}>Save</button></div>
       </div>
     </div>
   );
 }
 
-// ============================================
-// MISSING PROOF ALERT COMPONENT
-// ============================================
-
 function MissingProofAlert({ days, onScrollToDay }) {
   const today = new Date();
-  const todayStr = today.toISOString().split('T')[0];
-  
-  // Find yesterday if it's missing proof
   const yesterday = new Date(today);
   yesterday.setDate(yesterday.getDate() - 1);
-  const yesterdayStr = yesterday.toISOString().split('T')[0];
-  
+  const yesterdayStr = getLocalDateStr(yesterday);
   const yesterdayDay = days.find(d => d.id === yesterdayStr);
-  
   if (!yesterdayDay || yesterdayDay.isTravel) return null;
-  
   const hasHealth = !!yesterdayDay.proofFiles?.appleHealth;
   const hasCrono = !!yesterdayDay.proofFiles?.cronometer;
-  
   if (hasHealth && hasCrono) return null;
-  
   return (
     <div className="missing-proof-alert" onClick={() => onScrollToDay(yesterdayStr)}>
       <span className="alert-icon">⚠️</span>
-      <span className="alert-text">
-        Yesterday missing proof: {!hasHealth && '📱'} {!hasCrono && '🥗'}
-      </span>
+      <span className="alert-text">Yesterday missing proof: {!hasHealth && '📱'} {!hasCrono && '🥗'}</span>
       <span className="alert-action">Upload now →</span>
     </div>
   );
 }
 
-// ============================================
-// EMBED VIEW
-// ============================================
-
 function Embed({ stats, days }) {
-  const recent = days
-    .filter(d => new Date(d.date) <= new Date() && new Date(d.date) >= new Date(Date.now() - 7*24*60*60*1000))
-    .reverse();
-  
+  const todayStr = getLocalDateStr();
+  const recent = days.filter(d => d.date <= todayStr && d.date >= getLocalDateStr(new Date(Date.now() - 7*24*60*60*1000))).reverse();
   return (
     <div className="embed">
-      <div className="emb-head">
-        <span className="emb-icon">🎯</span>
-        <div><h2>FBI PFT Journey</h2><span>Alec Santiago</span></div>
-      </div>
+      <div className="emb-head"><span className="emb-icon">🎯</span><div><h2>FBI PFT Journey</h2><span>Alec Santiago</span></div></div>
       <div className="emb-stats">
         <div><span className="ev">{stats.daysRemaining}</span><span className="el">Days</span></div>
         <div><span className="ev">{stats.currentStreak}🔥</span><span className="el">Streak</span></div>
@@ -813,22 +652,12 @@ function Embed({ stats, days }) {
           const hasHealth = !!d.proofFiles?.appleHealth;
           const hasCrono = !!d.proofFiles?.cronometer;
           const hasProof = hasHealth && hasCrono;
-          
           return (
             <div key={d.id} className={`er-row ${done===items.length&&items.length>0?'full':''}`}>
               <span>{new Date(d.date+'T12:00:00').toLocaleDateString('en-US',{weekday:'short',month:'short',day:'numeric'})}</span>
               <span className="er-score">{done}/{items.length}</span>
               <span className="er-proof">
-                {d.isTravel ? (
-                  <span className="proof-na">✈️</span>
-                ) : hasProof ? (
-                  <>
-                    <a href={d.proofFiles.appleHealth} target="_blank" rel="noopener noreferrer" className="proof-icon" title="Health">📱</a>
-                    <a href={d.proofFiles.cronometer} target="_blank" rel="noopener noreferrer" className="proof-icon" title="Cronometer">🥗</a>
-                  </>
-                ) : (
-                  <span className="proof-missing-embed">❌ No proof</span>
-                )}
+                {d.isTravel ? <span className="proof-na">✈️</span> : hasProof ? <><a href={d.proofFiles.appleHealth} target="_blank" rel="noopener noreferrer" className="proof-icon" title="Health">📱</a><a href={d.proofFiles.cronometer} target="_blank" rel="noopener noreferrer" className="proof-icon" title="Cronometer">🥗</a></> : <span className="proof-missing-embed">❌ No proof</span>}
               </span>
             </div>
           );
@@ -847,25 +676,13 @@ export default function App() {
   const [days, setDays] = useState(() => {
     try { 
       const stored = JSON.parse(localStorage.getItem(STORAGE_KEY));
-      if (stored) {
-        // Migrate old data: add proofFiles if missing
-        return stored.map(d => ({
-          ...d,
-          proofFiles: d.proofFiles || { appleHealth: null, cronometer: null, uploadedAt: null }
-        }));
-      }
+      if (stored) return stored.map(d => ({ ...d, proofFiles: d.proofFiles || { appleHealth: null, cronometer: null, uploadedAt: null } }));
       return generateAllDays(); 
-    }
-    catch { return generateAllDays(); }
+    } catch { return generateAllDays(); }
   });
-  const [checkpoints, setCheckpoints] = useState(() => {
-    try { return JSON.parse(localStorage.getItem(STORAGE_KEY+'-cp')) || {}; }
-    catch { return {}; }
-  });
-  const [settings, setSettings] = useState(() => {
-    try { return JSON.parse(localStorage.getItem(STORAGE_KEY+'-set')) || { showWeight: true, requireProof: false }; }
-    catch { return { showWeight: true, requireProof: false }; }
-  });
+  const [checkpoints, setCheckpoints] = useState(() => { try { return JSON.parse(localStorage.getItem(STORAGE_KEY+'-cp')) || {}; } catch { return {}; } });
+  const [settings, setSettings] = useState(() => { try { return JSON.parse(localStorage.getItem(STORAGE_KEY+'-set')) || { showWeight: true, requireProof: false }; } catch { return { showWeight: true, requireProof: false }; } });
+  const [lifts, setLifts] = useState(() => { try { return JSON.parse(localStorage.getItem(STORAGE_KEY+'-lifts')) || { bench: '225', squat: '315', deadlift: '315', pushups: '35', pullups: '10' }; } catch { return { bench: '225', squat: '315', deadlift: '315', pushups: '35', pullups: '10' }; } });
   const [isEditing, setIsEditing] = useState(false);
   const [pw, setPw] = useState('');
   const [modal, setModal] = useState(null);
@@ -876,97 +693,44 @@ export default function App() {
   useEffect(() => { localStorage.setItem(STORAGE_KEY, JSON.stringify(days)); }, [days]);
   useEffect(() => { localStorage.setItem(STORAGE_KEY+'-cp', JSON.stringify(checkpoints)); }, [checkpoints]);
   useEffect(() => { localStorage.setItem(STORAGE_KEY+'-set', JSON.stringify(settings)); }, [settings]);
+  useEffect(() => { localStorage.setItem(STORAGE_KEY+'-lifts', JSON.stringify(lifts)); }, [lifts]);
   
   const stats = useMemo(() => {
     const today = new Date();
-    const todayStr = today.toISOString().split('T')[0];
+    const todayStr = getLocalDateStr(today);
     const test = new Date('2026-04-01');
     const daysRemaining = Math.max(0, Math.ceil((test - today) / 86400000));
     const td = days.find(d => d.date === todayStr);
     const currentPhase = td?.phase || 1;
     const currentWeek = td?.weekNumber || 1;
     
-    // Calculate streak with optional proof requirement
     let currentStreak = 0;
-    const sorted = days.filter(d => new Date(d.date) <= today).sort((a,b) => new Date(b.date) - new Date(a.date));
+    const sorted = days.filter(d => d.date <= todayStr).sort((a,b) => b.date.localeCompare(a.date));
     for (const d of sorted) {
       const items = [...(d.activities||[]),...(d.habits||[])];
       const allItemsDone = items.length === 0 || items.every(x=>x.completed);
-      const proofDone = settings.requireProof && !d.isTravel ? 
-        (d.proofFiles?.appleHealth && d.proofFiles?.cronometer) : true;
-      
-      if (allItemsDone && proofDone) { 
-        if (items.length) currentStreak++; 
-      } else {
-        break;
-      }
+      const proofDone = settings.requireProof && !d.isTravel ? (d.proofFiles?.appleHealth && d.proofFiles?.cronometer) : true;
+      if (allItemsDone && proofDone) { if (items.length) currentStreak++; } else break;
     }
     
-    const past = days.filter(d => new Date(d.date) <= today);
+    const past = days.filter(d => d.date <= todayStr);
     let tot = 0, done = 0;
     past.forEach(d => { const i = [...(d.activities||[]),...(d.habits||[])]; tot += i.length; done += i.filter(x=>x.completed).length; });
     const totalCompletion = tot > 0 ? Math.round((done/tot)*100) : 0;
     
-    const latestCp = Object.entries(checkpoints).filter(([_,v])=>v.weight).sort(([a],[b])=>b-a)[0];
-    const currentWeight = latestCp ? Number(latestCp[1].weight) : 190;
+    const latestCp = Object.entries(checkpoints).filter(([_,v])=>v.weight).sort(([a],[b])=>Number(b)-Number(a))[0];
+    const currentWeight = latestCp ? Number(latestCp[1].weight) : WEIGHT_START;
     
     return { daysRemaining, currentPhase, currentWeek, currentStreak, totalCompletion, currentWeight };
   }, [days, checkpoints, settings.requireProof]);
   
-  const weekGroups = useMemo(() => {
-    const g = {};
-    days.forEach(d => { if (!g[d.weekNumber]) g[d.weekNumber] = []; g[d.weekNumber].push(d); });
-    return g;
-  }, [days]);
+  const weekGroups = useMemo(() => { const g = {}; days.forEach(d => { if (!g[d.weekNumber]) g[d.weekNumber] = []; g[d.weekNumber].push(d); }); return g; }, [days]);
   
-  const onToggle = (dayId, section, idx) => {
-    setDays(prev => prev.map(d => {
-      if (d.id !== dayId) return d;
-      const arr = [...d[section]];
-      arr[idx] = { ...arr[idx], completed: !arr[idx].completed };
-      return { ...d, [section]: arr };
-    }));
-  };
-  
-  const onUploadProof = useCallback((dayId, type, url) => {
-    setDays(prev => prev.map(d => {
-      if (d.id !== dayId) return d;
-      return {
-        ...d,
-        proofFiles: {
-          ...d.proofFiles,
-          [type]: url,
-          uploadedAt: new Date().toISOString()
-        }
-      };
-    }));
-  }, []);
-  
-  const onRemoveProof = useCallback((dayId, type) => {
-    setDays(prev => prev.map(d => {
-      if (d.id !== dayId) return d;
-      return {
-        ...d,
-        proofFiles: {
-          ...d.proofFiles,
-          [type]: null
-        }
-      };
-    }));
-  }, []);
-  
-  const onScrollToDay = useCallback((dayId) => {
-    const dayData = days.find(d => d.id === dayId);
-    if (dayData) {
-      setSelWeek(dayData.weekNumber);
-      // Small delay to let React render the week, then scroll
-      setTimeout(() => {
-        const el = document.querySelector(`[data-day-id="${dayId}"]`);
-        if (el) el.scrollIntoView({ behavior: 'smooth', block: 'center' });
-      }, 100);
-    }
-  }, [days]);
-  
+  const onToggle = (dayId, section, idx) => { setDays(prev => prev.map(d => { if (d.id !== dayId) return d; const arr = [...d[section]]; arr[idx] = { ...arr[idx], completed: !arr[idx].completed }; return { ...d, [section]: arr }; })); };
+  const onUploadProof = useCallback((dayId, type, url) => { setDays(prev => prev.map(d => { if (d.id !== dayId) return d; return { ...d, proofFiles: { ...d.proofFiles, [type]: url, uploadedAt: new Date().toISOString() } }; })); }, []);
+  const onRemoveProof = useCallback((dayId, type) => { setDays(prev => prev.map(d => { if (d.id !== dayId) return d; return { ...d, proofFiles: { ...d.proofFiles, [type]: null } }; })); }, []);
+  const onScrollToDay = useCallback((dayId) => { const dayData = days.find(d => d.id === dayId); if (dayData) { setSelWeek(dayData.weekNumber); setTimeout(() => { const el = document.querySelector(`[data-day-id="${dayId}"]`); if (el) el.scrollIntoView({ behavior: 'smooth', block: 'center' }); }, 100); } }, [days]);
+  const onUpdateLift = useCallback((id, value) => { setLifts(prev => ({ ...prev, [id]: value })); }, []);
   const onSaveCp = (wk, vals) => { setCheckpoints(p => ({...p, [wk]: vals})); setModal(null); };
   const onPw = e => { e.preventDefault(); if (pw === EDIT_PASSWORD) setIsEditing(true); else alert('Wrong'); setPw(''); };
   
@@ -978,61 +742,29 @@ export default function App() {
     <div className="app">
       <Header stats={stats} />
       <Stats stats={stats} />
-      
-      {/* Missing proof alert */}
       {isEditing && <MissingProofAlert days={days} onScrollToDay={onScrollToDay} />}
-      
       <div className="layout">
         <aside className="side">
           <div className="edit-box">
-            {isEditing ? (
-              <div className="editing"><span>✏️ Editing</span><button onClick={() => setIsEditing(false)}>Lock</button></div>
-            ) : (
-              <form onSubmit={onPw}><input type="password" placeholder="Password" value={pw} onChange={e=>setPw(e.target.value)} /><button>Unlock</button></form>
-            )}
+            {isEditing ? <div className="editing"><span>✏️ Editing</span><button onClick={() => setIsEditing(false)}>Lock</button></div>
+                       : <form onSubmit={onPw}><input type="password" placeholder="Password" value={pw} onChange={e=>setPw(e.target.value)} /><button>Unlock</button></form>}
           </div>
-          <Weight start={190} current={stats.currentWeight} target={175} show={settings.showWeight} />
+          <Weight current={stats.currentWeight} show={settings.showWeight} />
           {isEditing && (
             <div className="settings-toggles">
-              <label className="toggle">
-                <input type="checkbox" checked={settings.showWeight} onChange={e=>setSettings({...settings,showWeight:e.target.checked})} /> 
-                Show weight
-              </label>
-              <label className="toggle">
-                <input type="checkbox" checked={settings.requireProof} onChange={e=>setSettings({...settings,requireProof:e.target.checked})} /> 
-                Proof breaks streak
-              </label>
+              <label className="toggle"><input type="checkbox" checked={settings.showWeight} onChange={e=>setSettings({...settings,showWeight:e.target.checked})} /> Show weight</label>
+              <label className="toggle"><input type="checkbox" checked={settings.requireProof} onChange={e=>setSettings({...settings,requireProof:e.target.checked})} /> Proof breaks streak</label>
             </div>
           )}
-          <div className="week-nav">
-            <h4>Weeks</h4>
-            <div className="wk-btns">
-              {Object.keys(weekGroups).map(w => (
-                <button key={w} className={`wk-btn ${+w===displayWeek?'sel':''} ${+w===stats.currentWeek?'cur':''}`} onClick={()=>setSelWeek(+w)}>{w}</button>
-              ))}
-            </div>
-          </div>
-          
-          {/* Proof calendar grid */}
+          <LiftTracker lifts={lifts} onUpdate={onUpdateLift} isEditing={isEditing} />
+          <div className="week-nav"><h4>Weeks</h4><div className="wk-btns">{Object.keys(weekGroups).map(w => <button key={w} className={`wk-btn ${+w===displayWeek?'sel':''} ${+w===stats.currentWeek?'cur':''}`} onClick={()=>setSelWeek(+w)}>{w}</button>)}</div></div>
           <ProofCalendarGrid days={days} />
-          
           <Checkpoints checkpoints={checkpoints} currentWeek={stats.currentWeek} onLog={setModal} isEditing={isEditing} />
           <Meals />
-          <div className="share">
-            <h4>📤 Embed</h4>
-            <code>?embed=true</code>
-          </div>
+          <PhaseInfo />
+          <div className="share"><h4>📤 Embed</h4><code>?embed=true</code></div>
         </aside>
-        <main className="main">
-          <Week 
-            weekNum={displayWeek} 
-            days={weekGroups[displayWeek]||[]} 
-            isEditing={isEditing} 
-            onToggle={onToggle}
-            onUploadProof={onUploadProof}
-            onRemoveProof={onRemoveProof}
-          />
-        </main>
+        <main className="main"><Week weekNum={displayWeek} days={weekGroups[displayWeek]||[]} isEditing={isEditing} onToggle={onToggle} onUploadProof={onUploadProof} onRemoveProof={onRemoveProof} /></main>
       </div>
       {modal && <Modal week={modal} onSave={onSaveCp} onCancel={()=>setModal(null)} />}
     </div>
