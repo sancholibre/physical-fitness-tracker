@@ -144,6 +144,7 @@ function generateAllDays() {
       isTravel: false,
       isCheckpoint: weekNum % 2 === 0 && dow === 6 && weekNum <= 12,
       notes: '',
+      weight: null, // NEW: daily weight tracking
       proofFiles: {
         appleHealth: null,
         cronometer: null,
@@ -340,7 +341,7 @@ const MEALS = {
 // COMPONENTS
 // ============================================
 
-function Header({ stats }) {
+function Header({ stats, onGoToToday }) {
   return (
     <header className="header">
       <div className="brand">
@@ -350,6 +351,9 @@ function Header({ stats }) {
           <span className="subtitle">Alec Santiago • 89 Days to Agent</span>
         </div>
       </div>
+      <button className="goto-today-btn" onClick={onGoToToday}>
+        📍 Go To Today
+      </button>
       <div className="countdown">
         <div className="cd-num">{stats.daysRemaining}</div>
         <div className="cd-label">DAYS LEFT</div>
@@ -436,7 +440,7 @@ function FileUpload({ dayId, type, currentUrl, onUpload, onRemove, isEditing }) 
 function ProofStatusBadge({ day }) {
   const hasHealth = !!day.proofFiles?.appleHealth;
   const hasCrono = !!day.proofFiles?.cronometer;
-  if (hasHealth && hasCrono) return <span className="proof-badge complete" title="Proof uploaded">📸✓</span>;
+  if (hasHealth && hasCrono) return <span className="proof-badge complete" title="Proof uploaded">📸✔</span>;
   if (hasHealth || hasCrono) return <span className="proof-badge partial" title="Partial proof">{hasHealth ? '📱' : ''}{hasCrono ? '🥗' : ''}</span>;
   return null;
 }
@@ -465,7 +469,7 @@ function ProofCalendarGrid({ days }) {
                 else if (complete) cls += ' complete';
                 else if (partial) cls += ' partial';
                 else cls += ' missing';
-                return <span key={day.id} className={cls} title={day.date}>{complete ? '✓' : partial ? (hasHealth ? '📱' : '🥗') : isPast ? '❌' : '○'}</span>;
+                return <span key={day.id} className={cls} title={day.date}>{complete ? '✔' : partial ? (hasHealth ? '📱' : '🥗') : isPast ? '❌' : '○'}</span>;
               })}
             </div>
           </div>
@@ -480,7 +484,7 @@ function LiftTracker({ lifts, onUpdate, isEditing }) {
     { id: 'bench', label: 'Bench', icon: '🏋️' },
     { id: 'squat', label: 'Squat', icon: '🦵' },
     { id: 'deadlift', label: 'Deadlift', icon: '💪' },
-    { id: 'pushups', label: 'Push-Ups', icon: '👐' },
+    { id: 'pushups', label: 'Push-Ups', icon: '👊' },
     { id: 'pullups', label: 'Pull-Ups', icon: '🔝' },
   ];
   
@@ -513,7 +517,182 @@ function PhaseInfo() {
   );
 }
 
-function DayCard({ day, isToday, isEditing, onToggle, onUploadProof, onRemoveProof }) {
+// ============================================
+// WEIGHT SPARKLINE COMPONENT
+// ============================================
+
+function WeightSparkline({ days, show }) {
+  const [expanded, setExpanded] = useState(false);
+  
+  // Get all days with weight data
+  const weightData = useMemo(() => {
+    return days
+      .filter(d => d.weight !== null && d.weight !== undefined && d.weight !== '')
+      .map(d => ({
+        dayNumber: d.dayNumber,
+        date: d.date,
+        weight: parseFloat(d.weight)
+      }))
+      .filter(d => !isNaN(d.weight))
+      .sort((a, b) => a.dayNumber - b.dayNumber);
+  }, [days]);
+  
+  if (!show || weightData.length === 0) return null;
+  
+  const weights = weightData.map(d => d.weight);
+  const minW = Math.min(...weights, WEIGHT_TARGET) - 2;
+  const maxW = Math.max(...weights, WEIGHT_START) + 2;
+  const range = maxW - minW;
+  
+  // SVG dimensions
+  const width = 240;
+  const height = expanded ? 120 : 60;
+  const padding = { top: 10, right: 10, bottom: expanded ? 20 : 10, left: 30 };
+  const graphWidth = width - padding.left - padding.right;
+  const graphHeight = height - padding.top - padding.bottom;
+  
+  // Scale functions
+  const xScale = (dayNum) => padding.left + ((dayNum - 1) / 88) * graphWidth;
+  const yScale = (w) => padding.top + graphHeight - ((w - minW) / range) * graphHeight;
+  
+  // Create path
+  const pathData = weightData.map((d, i) => {
+    const x = xScale(d.dayNumber);
+    const y = yScale(d.weight);
+    return `${i === 0 ? 'M' : 'L'} ${x} ${y}`;
+  }).join(' ');
+  
+  // Target line y position
+  const targetY = yScale(WEIGHT_TARGET);
+  const startY = yScale(WEIGHT_START);
+  
+  return (
+    <div className="weight-sparkline">
+      <div className="sparkline-header" onClick={() => setExpanded(!expanded)}>
+        <span>📈 Trend</span>
+        <span className="sparkline-toggle">{expanded ? '▼' : '▶'}</span>
+      </div>
+      <svg width={width} height={height} className="sparkline-svg">
+        {/* Grid lines (expanded only) */}
+        {expanded && (
+          <>
+            <line x1={padding.left} y1={targetY} x2={width - padding.right} y2={targetY} stroke="#22c55e" strokeWidth="1" strokeDasharray="4,4" opacity="0.5" />
+            <line x1={padding.left} y1={startY} x2={width - padding.right} y2={startY} stroke="#ef4444" strokeWidth="1" strokeDasharray="4,4" opacity="0.3" />
+            <text x={padding.left - 4} y={targetY + 3} fontSize="9" fill="#22c55e" textAnchor="end">{WEIGHT_TARGET}</text>
+            <text x={padding.left - 4} y={startY + 3} fontSize="9" fill="#ef4444" textAnchor="end">{WEIGHT_START}</text>
+          </>
+        )}
+        
+        {/* Weight line */}
+        <path d={pathData} fill="none" stroke="#3b82f6" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+        
+        {/* Data points (expanded only) */}
+        {expanded && weightData.map((d, i) => (
+          <circle key={i} cx={xScale(d.dayNumber)} cy={yScale(d.weight)} r="3" fill="#3b82f6" stroke="#0a0a0b" strokeWidth="1">
+            <title>Day {d.dayNumber}: {d.weight} lbs</title>
+          </circle>
+        ))}
+        
+        {/* Latest point */}
+        {weightData.length > 0 && (
+          <circle 
+            cx={xScale(weightData[weightData.length - 1].dayNumber)} 
+            cy={yScale(weightData[weightData.length - 1].weight)} 
+            r="4" 
+            fill="#22c55e" 
+            stroke="#0a0a0b" 
+            strokeWidth="2"
+          />
+        )}
+      </svg>
+      {expanded && (
+        <div className="sparkline-legend">
+          <span className="legend-item"><span className="dot target"></span>Target: {WEIGHT_TARGET}</span>
+          <span className="legend-item"><span className="dot start"></span>Start: {WEIGHT_START}</span>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ============================================
+// WEIGHT SIDEBAR COMPONENT (with quick-log)
+// ============================================
+
+function Weight({ current, show, days, onLogTodayWeight, isEditing, todayWeight }) {
+  const [quickWeight, setQuickWeight] = useState('');
+  
+  if (!show) return null;
+  
+  const lost = WEIGHT_START - current;
+  const toGo = current - WEIGHT_TARGET;
+  const pct = Math.min(Math.max((lost / (WEIGHT_START - WEIGHT_TARGET)) * 100, 0), 100);
+  
+  const handleQuickLog = (e) => {
+    e.preventDefault();
+    const w = parseFloat(quickWeight);
+    if (!isNaN(w) && w > 0 && w < 500) {
+      onLogTodayWeight(w);
+      setQuickWeight('');
+    }
+  };
+  
+  // Calculate weekly average loss
+  const weightData = days
+    .filter(d => d.weight !== null && d.weight !== undefined && d.weight !== '')
+    .map(d => ({ dayNumber: d.dayNumber, weight: parseFloat(d.weight) }))
+    .filter(d => !isNaN(d.weight))
+    .sort((a, b) => a.dayNumber - b.dayNumber);
+  
+  let avgLossPerWeek = null;
+  if (weightData.length >= 2) {
+    const first = weightData[0];
+    const last = weightData[weightData.length - 1];
+    const daysDiff = last.dayNumber - first.dayNumber;
+    if (daysDiff > 0) {
+      const totalLoss = first.weight - last.weight;
+      avgLossPerWeek = (totalLoss / daysDiff) * 7;
+    }
+  }
+  
+  return (
+    <div className="weight">
+      <h3>⚖️ Weight Progress</h3>
+      <div className="wt-stats">
+        <div><span className="wv">{lost > 0 ? lost.toFixed(1) : 0}</span><span className="wl">lbs lost</span></div>
+        <div><span className="wv">{current.toFixed(1)}</span><span className="wl">lbs now</span></div>
+        <div><span className="wv">{toGo > 0 ? toGo.toFixed(1) : 0}</span><span className="wl">lbs to go</span></div>
+      </div>
+      <div className="wt-bar"><div className="wt-fill" style={{ width: `${pct}%` }}></div></div>
+      <div className="wt-range"><span>{WEIGHT_START} lbs</span><span>→</span><span>{WEIGHT_TARGET} lbs</span></div>
+      
+      {avgLossPerWeek !== null && (
+        <div className="wt-rate">
+          Avg: <strong>{avgLossPerWeek > 0 ? '-' : '+'}{Math.abs(avgLossPerWeek).toFixed(2)}</strong> lbs/week
+        </div>
+      )}
+      
+      {/* Quick-log for today */}
+      {isEditing && (
+        <form className="quick-weight-form" onSubmit={handleQuickLog}>
+          <input 
+            type="number" 
+            step="0.1" 
+            placeholder={todayWeight ? `Today: ${todayWeight}` : "Log today's weight"} 
+            value={quickWeight} 
+            onChange={e => setQuickWeight(e.target.value)}
+            className="quick-weight-input"
+          />
+          <button type="submit" className="quick-weight-btn">Log</button>
+        </form>
+      )}
+      
+      <WeightSparkline days={days} show={true} />
+    </div>
+  );
+}
+
+function DayCard({ day, isToday, isEditing, onToggle, onUploadProof, onRemoveProof, onUpdateWeight }) {
   const dt = new Date(day.date + 'T12:00:00');
   const dayName = dt.toLocaleDateString('en-US', { weekday: 'short' });
   const monthDay = dt.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
@@ -544,9 +723,26 @@ function DayCard({ day, isToday, isEditing, onToggle, onUploadProof, onRemovePro
         {total > 0 && <span className={`score ${pct === 100 ? 'full' : ''}`}>{done}/{total}</span>}
       </div>
       <div className="day-body">
+        {/* Weight input row */}
+        <div className="weight-row">
+          <span className="weight-label">⚖️ Weight</span>
+          {isEditing ? (
+            <input 
+              type="number" 
+              step="0.1" 
+              className="weight-input" 
+              value={day.weight || ''} 
+              onChange={(e) => onUpdateWeight(day.id, e.target.value)}
+              placeholder="—"
+            />
+          ) : (
+            <span className="weight-display">{day.weight ? `${day.weight} lbs` : '—'}</span>
+          )}
+        </div>
+        
         {day.activities?.map((a, i) => (
           <div key={a.id || i} className={`item ${a.completed ? 'done' : ''} t-${a.type}`} onClick={() => isEditing && onToggle(day.id, 'activities', i)}>
-            <span className="chk">{a.completed ? '✓' : '○'}</span><span className="nm">{a.name}</span>
+            <span className="chk">{a.completed ? '✔' : '○'}</span><span className="nm">{a.name}</span>
           </div>
         ))}
         {day.habits?.length > 0 && (
@@ -555,7 +751,7 @@ function DayCard({ day, isToday, isEditing, onToggle, onUploadProof, onRemovePro
             <div className="hab-grid">
               {day.habits.map((h, i) => (
                 <div key={h.id || i} className={`hab ${h.completed ? 'done' : ''}`} onClick={() => isEditing && onToggle(day.id, 'habits', i)}>
-                  <span className="hchk">{h.completed ? '✓' : '○'}</span><span className="hnm">{h.name}</span>
+                  <span className="hchk">{h.completed ? '✔' : '○'}</span><span className="hnm">{h.name}</span>
                 </div>
               ))}
             </div>
@@ -575,13 +771,13 @@ function DayCard({ day, isToday, isEditing, onToggle, onUploadProof, onRemovePro
   );
 }
 
-function Week({ weekNum, days, isEditing, onToggle, onUploadProof, onRemoveProof }) {
+function Week({ weekNum, days, isEditing, onToggle, onUploadProof, onRemoveProof, onUpdateWeight }) {
   const todayStr = getLocalDateStr();
   const phase = days[0]?.phase || 1;
   return (
     <div className="week">
       <div className="week-head"><h2>Week {weekNum}</h2><span className="ph">Phase {phase}: {phase === 1 ? 'Base Building' : phase === 2 ? 'Sharpening' : 'Taper'}</span></div>
-      <div className="week-days">{days.map(d => <DayCard key={d.id} day={d} isToday={d.date === todayStr} isEditing={isEditing} onToggle={onToggle} onUploadProof={onUploadProof} onRemoveProof={onRemoveProof} />)}</div>
+      <div className="week-days">{days.map(d => <DayCard key={d.id} day={d} isToday={d.date === todayStr} isEditing={isEditing} onToggle={onToggle} onUploadProof={onUploadProof} onRemoveProof={onRemoveProof} onUpdateWeight={onUpdateWeight} />)}</div>
     </div>
   );
 }
@@ -597,30 +793,11 @@ function Checkpoints({ checkpoints, currentWeek, onLog, isEditing }) {
         return (
           <div key={w} className={`cp-row ${a ? 'logged' : ''}`}>
             <div className="cp-wk">Week {w}</div>
-            {a ? <span className="cp-done">✓</span> : past && isEditing ? <button className="cp-btn" onClick={() => onLog(w)}>Log</button> : null}
+            {a ? <span className="cp-done">✔</span> : past && isEditing ? <button className="cp-btn" onClick={() => onLog(w)}>Log</button> : null}
             <div className="cp-tgts"><span>Run: {t.run}</span><span>Push: {t.pushups}</span><span>Pull: {t.pullups}</span></div>
           </div>
         );
       })}
-    </div>
-  );
-}
-
-function Weight({ current, show }) {
-  if (!show) return null;
-  const lost = WEIGHT_START - current;
-  const toGo = current - WEIGHT_TARGET;
-  const pct = Math.min(Math.max((lost / (WEIGHT_START - WEIGHT_TARGET)) * 100, 0), 100);
-  return (
-    <div className="weight">
-      <h3>⚖️ Weight Loss Progress</h3>
-      <div className="wt-stats">
-        <div><span className="wv">{lost > 0 ? lost : 0}</span><span className="wl">lbs lost</span></div>
-        <div><span className="wv">{current}</span><span className="wl">lbs now</span></div>
-        <div><span className="wv">{toGo > 0 ? toGo : 0}</span><span className="wl">lbs to go</span></div>
-      </div>
-      <div className="wt-bar"><div className="wt-fill" style={{ width: `${pct}%` }}></div></div>
-      <div className="wt-range"><span>{WEIGHT_START} lbs</span><span>→</span><span>{WEIGHT_TARGET} lbs</span></div>
     </div>
   );
 }
@@ -777,6 +954,7 @@ export default function App() {
                   completed: storedDay.habits?.[i]?.completed || false
                 })),
                 proofFiles: storedDay.proofFiles || genDay.proofFiles,
+                weight: storedDay.weight || null, // NEW: preserve weight
                 notes: storedDay.notes || ''
               };
             }
@@ -813,6 +991,26 @@ export default function App() {
     };
   }, [days, checkpoints, settings, lifts, loading, isEditing]);
   
+  // Get current weight from daily logs (most recent entry)
+  const currentWeight = useMemo(() => {
+    const todayStr = getLocalDateStr();
+    const daysWithWeight = days
+      .filter(d => d.date <= todayStr && d.weight !== null && d.weight !== undefined && d.weight !== '')
+      .sort((a, b) => b.date.localeCompare(a.date));
+    
+    if (daysWithWeight.length > 0) {
+      return parseFloat(daysWithWeight[0].weight);
+    }
+    return WEIGHT_START;
+  }, [days]);
+  
+  // Get today's weight for the quick-log placeholder
+  const todayWeight = useMemo(() => {
+    const todayStr = getLocalDateStr();
+    const today = days.find(d => d.id === todayStr);
+    return today?.weight || null;
+  }, [days]);
+  
   const stats = useMemo(() => {
     const today = new Date();
     const todayStr = getLocalDateStr(today);
@@ -836,18 +1034,39 @@ export default function App() {
     past.forEach(d => { const i = [...(d.activities||[]),...(d.habits||[])]; tot += i.length; done += i.filter(x=>x.completed).length; });
     const totalCompletion = tot > 0 ? Math.round((done/tot)*100) : 0;
     
-    const latestCp = Object.entries(checkpoints).filter(([_,v])=>v.weight).sort(([a],[b])=>Number(b)-Number(a))[0];
-    const currentWeight = latestCp ? Number(latestCp[1].weight) : WEIGHT_START;
-    
     return { daysRemaining, currentPhase, currentWeek, currentStreak, totalCompletion, currentWeight };
-  }, [days, checkpoints, settings.requireProof]);
+  }, [days, settings.requireProof, currentWeight]);
   
   const weekGroups = useMemo(() => { const g = {}; days.forEach(d => { if (!g[d.weekNumber]) g[d.weekNumber] = []; g[d.weekNumber].push(d); }); return g; }, [days]);
   
   const onToggle = (dayId, section, idx) => { setDays(prev => prev.map(d => { if (d.id !== dayId) return d; const arr = [...d[section]]; arr[idx] = { ...arr[idx], completed: !arr[idx].completed }; return { ...d, [section]: arr }; })); };
   const onUploadProof = useCallback((dayId, type, url) => { setDays(prev => prev.map(d => { if (d.id !== dayId) return d; return { ...d, proofFiles: { ...d.proofFiles, [type]: url, uploadedAt: new Date().toISOString() } }; })); }, []);
   const onRemoveProof = useCallback((dayId, type) => { setDays(prev => prev.map(d => { if (d.id !== dayId) return d; return { ...d, proofFiles: { ...d.proofFiles, [type]: null } }; })); }, []);
+  const onUpdateWeight = useCallback((dayId, weight) => { 
+    setDays(prev => prev.map(d => { 
+      if (d.id !== dayId) return d; 
+      return { ...d, weight: weight === '' ? null : weight }; 
+    })); 
+  }, []);
+  const onLogTodayWeight = useCallback((weight) => {
+    const todayStr = getLocalDateStr();
+    setDays(prev => prev.map(d => {
+      if (d.id !== todayStr) return d;
+      return { ...d, weight: weight };
+    }));
+  }, []);
   const onScrollToDay = useCallback((dayId) => { const dayData = days.find(d => d.id === dayId); if (dayData) { setSelWeek(dayData.weekNumber); setTimeout(() => { const el = document.querySelector(`[data-day-id="${dayId}"]`); if (el) el.scrollIntoView({ behavior: 'smooth', block: 'center' }); }, 100); } }, [days]);
+  const onGoToToday = useCallback(() => {
+    const todayStr = getLocalDateStr();
+    const todayData = days.find(d => d.id === todayStr);
+    if (todayData) {
+      setSelWeek(todayData.weekNumber);
+      setTimeout(() => {
+        const el = document.querySelector(`[data-day-id="${todayStr}"]`);
+        if (el) el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      }, 100);
+    }
+  }, [days]);
   const onUpdateLift = useCallback((id, value) => { setLifts(prev => ({ ...prev, [id]: value })); }, []);
   const onSaveCp = (wk, vals) => { setCheckpoints(p => ({...p, [wk]: vals})); setModal(null); };
   const onPw = e => { e.preventDefault(); if (pw === EDIT_PASSWORD) setIsEditing(true); else alert('Wrong'); setPw(''); };
@@ -869,7 +1088,7 @@ export default function App() {
   
   return (
     <div className="app">
-      <Header stats={stats} />
+      <Header stats={stats} onGoToToday={onGoToToday} />
       <Stats stats={stats} />
       {saving && <div className="save-indicator">💾 Saving...</div>}
       {isEditing && <MissingProofAlert days={days} onScrollToDay={onScrollToDay} />}
@@ -880,7 +1099,14 @@ export default function App() {
                        : <form onSubmit={onPw}><input type="password" placeholder="Password" value={pw} onChange={e=>setPw(e.target.value)} /><button>Unlock</button></form>}
           </div>
           {lastSaved && <div className="last-saved">Last saved: {new Date(lastSaved).toLocaleString()}</div>}
-          <Weight current={stats.currentWeight} show={settings.showWeight} />
+          <Weight 
+            current={currentWeight} 
+            show={settings.showWeight} 
+            days={days} 
+            onLogTodayWeight={onLogTodayWeight} 
+            isEditing={isEditing}
+            todayWeight={todayWeight}
+          />
           {isEditing && (
             <div className="settings-toggles">
               <label className="toggle"><input type="checkbox" checked={settings.showWeight} onChange={e=>setSettings({...settings,showWeight:e.target.checked})} /> Show weight</label>
@@ -896,7 +1122,7 @@ export default function App() {
           <div className="share"><h4>📤 Embed</h4><code>?embed=true</code></div>
           <SocialLinks />
         </aside>
-        <main className="main"><Week weekNum={displayWeek} days={weekGroups[displayWeek]||[]} isEditing={isEditing} onToggle={onToggle} onUploadProof={onUploadProof} onRemoveProof={onRemoveProof} /></main>
+        <main className="main"><Week weekNum={displayWeek} days={weekGroups[displayWeek]||[]} isEditing={isEditing} onToggle={onToggle} onUploadProof={onUploadProof} onRemoveProof={onRemoveProof} onUpdateWeight={onUpdateWeight} /></main>
       </div>
       {modal && <Modal week={modal} onSave={onSaveCp} onCancel={()=>setModal(null)} />}
     </div>

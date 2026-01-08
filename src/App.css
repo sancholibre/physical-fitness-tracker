@@ -26,7 +26,7 @@ body {
   min-height: 100vh;
 }
 
-.header { display: flex; justify-content: space-between; align-items: center; padding: 1rem 1.5rem; background: linear-gradient(180deg, #1a1a1d 0%, var(--bg) 100%); border-bottom: 1px solid var(--border); }
+.header { display: flex; justify-content: space-between; align-items: center; padding: 1rem 1.5rem; background: linear-gradient(180deg, #1a1a1d 0%, var(--bg) 100%); border-bottom: 1px solid var(--border); gap: 1rem; }
 .brand { display: flex; align-items: center; gap: 0.75rem; }
 .brand-icon { font-size: 2rem; }
 .brand h1 { font-family: 'JetBrains Mono', monospace; font-size: 1.25rem; font-weight: 700; letter-spacing: 0.05em; }
@@ -34,6 +34,24 @@ body {
 .countdown { text-align: right; }
 .cd-num { font-family: 'JetBrains Mono', monospace; font-size: 2.5rem; font-weight: 700; color: var(--accent); line-height: 1; }
 .cd-label { font-size: 0.65rem; text-transform: uppercase; letter-spacing: 0.1em; color: var(--text-dim); }
+
+/* Go To Today Button */
+.goto-today-btn {
+  padding: 0.5rem 1rem;
+  background: var(--accent-dim);
+  border: 1px solid var(--accent);
+  border-radius: 6px;
+  color: var(--text);
+  font-size: 0.85rem;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.2s;
+  white-space: nowrap;
+}
+.goto-today-btn:hover {
+  background: var(--accent);
+  color: #000;
+}
 
 .stats-bar { display: flex; justify-content: center; gap: 2rem; padding: 0.75rem 1rem; background: var(--bg-card); border-bottom: 1px solid var(--border); }
 .stat { display: flex; flex-direction: column; align-items: center; gap: 0.1rem; }
@@ -62,14 +80,151 @@ body {
 .toggle { display: flex; align-items: center; gap: 0.5rem; font-size: 0.8rem; color: var(--text-dim); cursor: pointer; }
 .toggle input { accent-color: var(--accent); }
 
+/* Weight Section */
+.weight { background: var(--bg); border-radius: 6px; padding: 0.75rem; }
 .weight h3 { font-size: 0.85rem; margin-bottom: 0.5rem; }
 .wt-stats { display: flex; justify-content: space-between; margin-bottom: 0.5rem; }
 .wt-stats > div { text-align: center; }
 .wv { font-family: 'JetBrains Mono', monospace; font-size: 1.25rem; font-weight: 600; display: block; }
 .wl { font-size: 0.65rem; color: var(--text-dim); text-transform: uppercase; }
-.wt-bar { height: 6px; background: var(--bg); border-radius: 3px; overflow: hidden; }
+.wt-bar { height: 6px; background: var(--bg-card); border-radius: 3px; overflow: hidden; }
 .wt-fill { height: 100%; background: linear-gradient(90deg, var(--accent) 0%, var(--blue) 100%); border-radius: 3px; transition: width 0.3s; }
 .wt-range { display: flex; justify-content: space-between; align-items: center; margin-top: 0.35rem; font-size: 0.7rem; color: var(--text-dim); }
+.wt-rate { font-size: 0.75rem; color: var(--text-dim); margin-top: 0.5rem; text-align: center; padding: 0.35rem; background: var(--bg-card); border-radius: 4px; }
+.wt-rate strong { color: var(--accent); }
+
+/* Quick Weight Form */
+.quick-weight-form {
+  display: flex;
+  gap: 0.5rem;
+  margin-top: 0.75rem;
+  padding-top: 0.75rem;
+  border-top: 1px dashed var(--border);
+}
+.quick-weight-input {
+  flex: 1;
+  padding: 0.4rem 0.5rem;
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  color: var(--text);
+  font-size: 0.8rem;
+  font-family: 'JetBrains Mono', monospace;
+}
+.quick-weight-input:focus {
+  outline: none;
+  border-color: var(--accent);
+}
+.quick-weight-input::placeholder {
+  color: var(--text-dim);
+  font-family: 'Inter', sans-serif;
+}
+.quick-weight-btn {
+  padding: 0.4rem 0.75rem;
+  background: var(--accent-dim);
+  border: none;
+  border-radius: 4px;
+  color: var(--text);
+  font-size: 0.8rem;
+  cursor: pointer;
+  transition: background 0.2s;
+}
+.quick-weight-btn:hover {
+  background: var(--accent);
+  color: #000;
+}
+
+/* Weight Sparkline */
+.weight-sparkline {
+  margin-top: 0.75rem;
+  padding-top: 0.75rem;
+  border-top: 1px dashed var(--border);
+}
+.sparkline-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  cursor: pointer;
+  font-size: 0.75rem;
+  color: var(--text-dim);
+  margin-bottom: 0.5rem;
+  padding: 0.25rem;
+  border-radius: 4px;
+  transition: background 0.15s;
+}
+.sparkline-header:hover {
+  background: var(--bg-card);
+}
+.sparkline-toggle {
+  font-size: 0.6rem;
+}
+.sparkline-svg {
+  display: block;
+  width: 100%;
+  background: var(--bg-card);
+  border-radius: 4px;
+}
+.sparkline-legend {
+  display: flex;
+  justify-content: center;
+  gap: 1rem;
+  margin-top: 0.5rem;
+  font-size: 0.65rem;
+  color: var(--text-dim);
+}
+.legend-item {
+  display: flex;
+  align-items: center;
+  gap: 0.25rem;
+}
+.legend-item .dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+}
+.legend-item .dot.target {
+  background: var(--accent);
+}
+.legend-item .dot.start {
+  background: var(--danger);
+}
+
+/* Day Card Weight Row */
+.weight-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0.5rem 0;
+  margin-bottom: 0.5rem;
+  border-bottom: 1px dashed var(--border);
+}
+.weight-label {
+  font-size: 0.8rem;
+  color: var(--text-dim);
+}
+.weight-input {
+  width: 80px;
+  padding: 0.3rem 0.5rem;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  color: var(--text);
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 0.85rem;
+  text-align: right;
+}
+.weight-input:focus {
+  outline: none;
+  border-color: var(--accent);
+}
+.weight-input::placeholder {
+  color: var(--text-dim);
+}
+.weight-display {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 0.85rem;
+  color: var(--blue);
+}
 
 .lift-tracker { background: var(--bg); border-radius: 6px; padding: 0.75rem; }
 .lift-tracker h3 { font-size: 0.85rem; margin-bottom: 0.5rem; }
@@ -250,6 +405,7 @@ body {
   .layout { flex-direction: column; }
   .side { width: 100%; border-right: none; border-bottom: 1px solid var(--border); max-height: none; }
   .week-days { grid-template-columns: 1fr; }
+  .goto-today-btn { padding: 0.4rem 0.75rem; font-size: 0.75rem; }
 }
 
 @media (max-width: 600px) {
@@ -258,7 +414,6 @@ body {
   .stats-bar { flex-wrap: wrap; gap: 1rem; }
   .proof-uploads { grid-template-columns: 1fr; }
 }
-/* Add these styles to your existing App.css */
 
 /* Loading Screen */
 .loading-screen {
