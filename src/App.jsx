@@ -414,12 +414,34 @@ function FileUpload({ dayId, type, currentUrl, onUpload, onRemove, isEditing }) 
   
   const isPdf = currentUrl?.toLowerCase().includes('.pdf');
   
+  // Transform Cloudinary PDF URL to viewable format
+  const getPdfViewUrl = (url) => {
+    // Use Google Docs viewer as fallback - works reliably across browsers
+    return `https://docs.google.com/viewer?url=${encodeURIComponent(url)}&embedded=true`;
+  };
+  
+  // Get PDF thumbnail (first page as image) from Cloudinary
+  const getPdfThumbnail = (url) => {
+    // Transform /raw/upload/ or /auto/upload/ to /image/upload/pg_1,w_100/
+    return url
+      .replace('/raw/upload/', '/image/upload/pg_1,w_100,h_100,c_fit/')
+      .replace('/auto/upload/', '/image/upload/pg_1,w_100,h_100,c_fit/');
+  };
+  
   if (currentUrl) {
     return (
       <div className="proof-uploaded">
         <span className="proof-label">{label}</span>
-        {isPdf ? <a href={currentUrl} target="_blank" rel="noopener noreferrer" className="proof-link">📄 View PDF</a>
-               : <a href={currentUrl} target="_blank" rel="noopener noreferrer" className="proof-thumb-link"><img src={currentUrl} alt={label} className="proof-thumb" loading="lazy" /></a>}
+        {isPdf ? (
+          <a href={getPdfViewUrl(currentUrl)} target="_blank" rel="noopener noreferrer" className="proof-thumb-link">
+            <img src={getPdfThumbnail(currentUrl)} alt={label} className="proof-thumb" loading="lazy" onError={(e) => { e.target.style.display = 'none'; e.target.nextSibling.style.display = 'block'; }} />
+            <span className="proof-link" style={{ display: 'none' }}>📄 View PDF</span>
+          </a>
+        ) : (
+          <a href={currentUrl} target="_blank" rel="noopener noreferrer" className="proof-thumb-link">
+            <img src={currentUrl} alt={label} className="proof-thumb" loading="lazy" />
+          </a>
+        )}
         {isEditing && <button className="proof-remove" onClick={handleRemove} title="Remove">×</button>}
       </div>
     );
