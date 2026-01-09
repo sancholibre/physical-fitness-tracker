@@ -414,13 +414,18 @@ function FileUpload({ dayId, type, currentUrl, onUpload, onRemove, isEditing }) 
   
   const isPdf = currentUrl?.toLowerCase().includes('.pdf');
   
+  // Force Cloudinary to serve as download instead of inline display
+  const getDownloadUrl = (url) => {
+    return url.replace('/upload/', '/upload/fl_attachment/');
+  };
+  
   if (currentUrl) {
     return (
       <div className="proof-uploaded">
         <span className="proof-label">{label}</span>
         {isPdf ? (
-          // PDFs: simple download link, no rendering attempts
-          <a href={currentUrl} download className="proof-pdf-link">
+          // PDFs: force download via Cloudinary flag
+          <a href={getDownloadUrl(currentUrl)} className="proof-pdf-link">
             📄 Download PDF
           </a>
         ) : (
