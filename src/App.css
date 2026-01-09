@@ -530,3 +530,20 @@ body {
 .emb-links a:hover {
   color: #22c55e;
 }
+.proof-pdf-link {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0.5rem 0.75rem;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  color: var(--text);
+  text-decoration: none;
+  font-size: 0.8rem;
+  transition: all 0.15s;
+}
+.proof-pdf-link:hover {
+  background: var(--bg-hover);
+  border-color: var(--accent);
+}

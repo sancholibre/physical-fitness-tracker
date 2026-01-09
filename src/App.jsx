@@ -414,31 +414,17 @@ function FileUpload({ dayId, type, currentUrl, onUpload, onRemove, isEditing }) 
   
   const isPdf = currentUrl?.toLowerCase().includes('.pdf');
   
-  // Transform Cloudinary PDF URL to render as image
-  // Handles both /image/upload/ and /raw/upload/ patterns
-  const getPdfAsImage = (url, width = null) => {
-    // Build transformation string
-    const transforms = ['pg_1']; // First page
-    if (width) transforms.push(`w_${width}`, 'c_fit');
-    const transformStr = transforms.join(',') + '/';
-    
-    // Insert transformation after /upload/
-    // Match pattern: /upload/v{numbers}/ or just /upload/
-    return url.replace(
-      /\/upload\/(v\d+\/)?/,
-      `/upload/${transformStr}$1`
-    );
-  };
-  
   if (currentUrl) {
     return (
       <div className="proof-uploaded">
         <span className="proof-label">{label}</span>
         {isPdf ? (
-          <a href={getPdfAsImage(currentUrl, 800)} target="_blank" rel="noopener noreferrer" className="proof-thumb-link">
-            <img src={getPdfAsImage(currentUrl, 100)} alt={label} className="proof-thumb" loading="lazy" />
+          // PDFs: simple download link, no rendering attempts
+          <a href={currentUrl} download className="proof-pdf-link">
+            📄 Download PDF
           </a>
         ) : (
+          // Images: thumbnail with click to view full
           <a href={currentUrl} target="_blank" rel="noopener noreferrer" className="proof-thumb-link">
             <img src={currentUrl} alt={label} className="proof-thumb" loading="lazy" />
           </a>
