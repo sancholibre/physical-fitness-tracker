@@ -77,6 +77,10 @@ async function uploadToCloudinary(file, onProgress) {
   formData.append('upload_preset', CLOUDINARY_UPLOAD_PRESET);
   formData.append('folder', 'fbi-pft');
   
+  // Use 'raw' endpoint for PDFs, 'image' for images
+  const isPdf = file.type === 'application/pdf' || file.name?.toLowerCase().endsWith('.pdf');
+  const resourceType = isPdf ? 'raw' : 'image';
+  
   return new Promise((resolve, reject) => {
     const xhr = new XMLHttpRequest();
     
@@ -99,7 +103,7 @@ async function uploadToCloudinary(file, onProgress) {
     xhr.addEventListener('error', () => reject(new Error('Network error')));
     xhr.addEventListener('abort', () => reject(new Error('Upload cancelled')));
     
-    xhr.open('POST', `https://api.cloudinary.com/v1_1/${CLOUDINARY_CLOUD_NAME}/auto/upload`);
+    xhr.open('POST', `https://api.cloudinary.com/v1_1/${CLOUDINARY_CLOUD_NAME}/${resourceType}/upload`);
     xhr.send(formData);
   });
 }
@@ -411,23 +415,31 @@ function FileUpload({ dayId, type, currentUrl, onUpload, onRemove, isEditing }) 
   const handleDragLeave = useCallback(() => { setDragOver(false); }, []);
   const handleInputChange = useCallback((e) => { handleFile(e.target.files[0]); e.target.value = ''; }, [handleFile]);
   const handleRemove = useCallback(() => { if (window.confirm('Remove this proof file?')) onRemove(dayId, type); }, [dayId, type, onRemove]);
+  const [showPdfModal, setShowPdfModal] = useState(false);
   
   const isPdf = currentUrl?.toLowerCase().includes('.pdf');
-  
-  // Force Cloudinary to serve as download instead of inline display
-  const getDownloadUrl = (url) => {
-    return url.replace('/upload/', '/upload/fl_attachment/');
-  };
   
   if (currentUrl) {
     return (
       <div className="proof-uploaded">
         <span className="proof-label">{label}</span>
         {isPdf ? (
-          // PDFs: force download via Cloudinary flag
-          <a href={getDownloadUrl(currentUrl)} className="proof-pdf-link">
-            📄 Download PDF
-          </a>
+          <>
+            <button onClick={() => setShowPdfModal(true)} className="proof-pdf-link">
+              📄 View PDF
+            </button>
+            {showPdfModal && (
+              <div className="pdf-modal-bg" onClick={() => setShowPdfModal(false)}>
+                <div className="pdf-modal" onClick={e => e.stopPropagation()}>
+                  <div className="pdf-modal-header">
+                    <span>{label}</span>
+                    <button onClick={() => setShowPdfModal(false)}>×</button>
+                  </div>
+                  <iframe src={currentUrl} title={label} className="pdf-iframe" />
+                </div>
+              </div>
+            )}
+          </>
         ) : (
           // Images: thumbnail with click to view full
           <a href={currentUrl} target="_blank" rel="noopener noreferrer" className="proof-thumb-link">
