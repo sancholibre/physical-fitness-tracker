@@ -414,18 +414,20 @@ function FileUpload({ dayId, type, currentUrl, onUpload, onRemove, isEditing }) 
   
   const isPdf = currentUrl?.toLowerCase().includes('.pdf');
   
-  // Transform Cloudinary PDF URL to viewable format
-  const getPdfViewUrl = (url) => {
-    // Use Google Docs viewer as fallback - works reliably across browsers
-    return `https://docs.google.com/viewer?url=${encodeURIComponent(url)}&embedded=true`;
-  };
-  
-  // Get PDF thumbnail (first page as image) from Cloudinary
-  const getPdfThumbnail = (url) => {
-    // Transform /raw/upload/ or /auto/upload/ to /image/upload/pg_1,w_100/
-    return url
-      .replace('/raw/upload/', '/image/upload/pg_1,w_100,h_100,c_fit/')
-      .replace('/auto/upload/', '/image/upload/pg_1,w_100,h_100,c_fit/');
+  // Transform Cloudinary PDF URL to render as image
+  // Handles both /image/upload/ and /raw/upload/ patterns
+  const getPdfAsImage = (url, width = null) => {
+    // Build transformation string
+    const transforms = ['pg_1']; // First page
+    if (width) transforms.push(`w_${width}`, 'c_fit');
+    const transformStr = transforms.join(',') + '/';
+    
+    // Insert transformation after /upload/
+    // Match pattern: /upload/v{numbers}/ or just /upload/
+    return url.replace(
+      /\/upload\/(v\d+\/)?/,
+      `/upload/${transformStr}$1`
+    );
   };
   
   if (currentUrl) {
@@ -433,9 +435,8 @@ function FileUpload({ dayId, type, currentUrl, onUpload, onRemove, isEditing }) 
       <div className="proof-uploaded">
         <span className="proof-label">{label}</span>
         {isPdf ? (
-          <a href={getPdfViewUrl(currentUrl)} target="_blank" rel="noopener noreferrer" className="proof-thumb-link">
-            <img src={getPdfThumbnail(currentUrl)} alt={label} className="proof-thumb" loading="lazy" onError={(e) => { e.target.style.display = 'none'; e.target.nextSibling.style.display = 'block'; }} />
-            <span className="proof-link" style={{ display: 'none' }}>📄 View PDF</span>
+          <a href={getPdfAsImage(currentUrl, 800)} target="_blank" rel="noopener noreferrer" className="proof-thumb-link">
+            <img src={getPdfAsImage(currentUrl, 100)} alt={label} className="proof-thumb" loading="lazy" />
           </a>
         ) : (
           <a href={currentUrl} target="_blank" rel="noopener noreferrer" className="proof-thumb-link">
