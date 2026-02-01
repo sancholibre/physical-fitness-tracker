@@ -3,8 +3,8 @@ import { createClient } from '@supabase/supabase-js';
 import './App.css';
 
 // ============================================
-// FBI PFT TRACKER - Alec Santiago
-// 89 Days to Pass | Jan 2 - April 1, 2026
+// GYST TRACKER - Alec Santiago
+// 89 Days to Peak | Jan 2 - April 1, 2026
 // ============================================
 
 // Supabase config
@@ -197,7 +197,7 @@ function getConferenceDayActivities(dateStr) {
     '2026-01-13': [{ id: 'z2-1', type: 'zone2', name: '🏃 Zone 2 - 40min (Embarcadero, before conference)', completed: false }],
     '2026-01-14': [{ id: 'lift-1', type: 'lifting', name: '🏋️ Lower Body - Fitness SF SOMA (Squat 3x5, RDL 2x6)', completed: false }],
     '2026-01-15': [{ id: 'z2-2', type: 'zone2', name: '🏃 Zone 2 - 45min (Embarcadero)', completed: false }],
-    '2026-01-16': [{ id: 'lift-2', type: 'lifting', name: '🏋️ Upper Pull - Fitness SF SOMA (Pull-ups 4x6, Rows 3x6)', completed: false }],
+    '2026-01-16': [{ id: 'lift-2', type: 'lifting', name: '🏋️ Pull Day - Fitness SF SOMA (Deadlift 3x5, Pull-ups 4x6, Rows 3x6)', completed: false }],
   };
   return map[dateStr] || [];
 }
@@ -219,6 +219,7 @@ function getVacationDayActivities(dateStr) {
 function getRegularActivities(dow, weekNum, phase) {
   const intervalDetail = getIntervalDetail(weekNum, phase);
   const tempoDetail = getTempoDetail(weekNum, phase);
+  const gtgDetail = getGTGDetail(weekNum, phase);
   
   if (phase === 3) {
     if (weekNum === 11) {
@@ -250,7 +251,7 @@ function getRegularActivities(dow, weekNum, phase) {
   if (phase === 2 && dow === 3 && (weekNum === 8 || weekNum === 10)) {
     return [
       { id: 'tt', type: 'timetrial', name: '⏱️ 1.5mi TIME TRIAL', completed: false },
-      { id: 'gtg', type: 'gtg', name: '💪 Push-up GTG (4 sets)', completed: false },
+      { id: 'gtg', type: 'gtg', name: `💪 Push-up GTG - ${gtgDetail}`, completed: false },
     ];
   }
   
@@ -259,18 +260,18 @@ function getRegularActivities(dow, weekNum, phase) {
     1: [
       { id: 'z2', type: 'zone2', name: '🏃 Zone 2 - 45min (AM)', completed: false },
       { id: 'lift', type: 'lifting', name: '🏋️ Upper Push (Bench 3x5, OHP 3x6, Dips 2x10)', completed: false },
-      { id: 'gtg', type: 'gtg', name: '💪 Push-up GTG (4 sets)', completed: false },
+      { id: 'gtg', type: 'gtg', name: `💪 Push-up GTG - ${gtgDetail}`, completed: false },
     ],
     2: [{ id: 'lift', type: 'lifting', name: '🏋️ Lower (Squat 3x5, RDL 3x8, BSS 2x8)', completed: false }],
     3: [
       { id: 'z2', type: 'zone2', name: '🏃 Zone 2 - 50min', completed: false },
       { id: 'strides', type: 'strides', name: '🏃 Strides - 4x100m after', completed: false },
-      { id: 'gtg', type: 'gtg', name: '💪 Push-up GTG (4 sets)', completed: false },
+      { id: 'gtg', type: 'gtg', name: `💪 Push-up GTG - ${gtgDetail}`, completed: false },
     ],
-    4: [{ id: 'lift', type: 'lifting', name: '🏋️ Upper Pull (Pull-ups 4x8, Row 3x8)', completed: false }],
+    4: [{ id: 'lift', type: 'lifting', name: '🏋️ Pull Day (Deadlift 3x5, Pull-ups 4x8, Row 3x8)', completed: false }],
     5: [
       { id: 'int', type: 'intervals', name: `🔥 Intervals - ${intervalDetail}`, completed: false },
-      { id: 'gtg', type: 'gtg', name: '💪 Push-up GTG (4 sets)', completed: false },
+      { id: 'gtg', type: 'gtg', name: `💪 Push-up GTG - ${gtgDetail}`, completed: false },
     ],
     6: [
       { id: 'tempo', type: 'tempo', name: `🏃 Tempo - ${tempoDetail}`, completed: false },
@@ -305,6 +306,21 @@ function getTempoDetail(weekNum, phase) {
     return '2x12min @ 7:45';
   }
   return '15min easy';
+}
+
+function getGTGDetail(weekNum, phase) {
+  // Progressive GTG: build volume from current 20/set baseline
+  if (phase === 1) {
+    if (weekNum <= 2) return '4x15 (60 total)';
+    if (weekNum <= 4) return '4x18 (72 total)';
+    return '4x20 (80 total)';
+  }
+  if (phase === 2) {
+    if (weekNum <= 8) return '4x22 (88 total)';
+    return '4x25 (100 total)';
+  }
+  // Phase 3: taper
+  return '3x18 (54 total)';
 }
 
 const CHECKPOINT_TARGETS = {
@@ -351,8 +367,8 @@ function Header({ stats, onGoToToday }) {
       <div className="brand">
         <span className="brand-icon">🎯</span>
         <div>
-          <h1>FBI PFT TRACKER</h1>
-          <span className="subtitle">Alec Santiago • 89 Days to Agent</span>
+          <h1>GYST TRACKER</h1>
+          <span className="subtitle">Alec Santiago • 89 Days to Peak</span>
         </div>
       </div>
       <button className="goto-today-btn" onClick={onGoToToday}>
@@ -486,6 +502,10 @@ function ProofCalendarGrid({ days }) {
             <div className="pw-days">
               {week.map(day => {
                 const isPast = day.date < todayStr;
+                // Travel days don't require proof - show airplane
+                if (day.isTravel) {
+                  return <span key={day.id} className="pd travel" title={`${day.date} - Travel`}>✈️</span>;
+                }
                 const hasHealth = !!day.proofFiles?.appleHealth;
                 const hasCrono = !!day.proofFiles?.cronometer;
                 const complete = hasHealth && hasCrono;
@@ -581,13 +601,6 @@ function WeightSparkline({ days, show }) {
   const xScale = (dayNum) => padding.left + ((dayNum - 1) / 88) * graphWidth;
   const yScale = (w) => padding.top + graphHeight - ((w - minW) / range) * graphHeight;
   
-  // Create path
-  const pathData = weightData.map((d, i) => {
-    const x = xScale(d.dayNumber);
-    const y = yScale(d.weight);
-    return `${i === 0 ? 'M' : 'L'} ${x} ${y}`;
-  }).join(' ');
-  
   // Target line y position
   const targetY = yScale(WEIGHT_TARGET);
   const startY = yScale(WEIGHT_START);
@@ -609,12 +622,9 @@ function WeightSparkline({ days, show }) {
           </>
         )}
         
-        {/* Weight line */}
-        <path d={pathData} fill="none" stroke="#3b82f6" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
-        
-        {/* Data points (expanded only) */}
-        {expanded && weightData.map((d, i) => (
-          <circle key={i} cx={xScale(d.dayNumber)} cy={yScale(d.weight)} r="3" fill="#3b82f6" stroke="#0a0a0b" strokeWidth="1">
+        {/* Data points (always visible, no connecting line) */}
+        {weightData.map((d, i) => (
+          <circle key={i} cx={xScale(d.dayNumber)} cy={yScale(d.weight)} r={expanded ? 4 : 3} fill="#3b82f6" stroke="#0a0a0b" strokeWidth="1">
             <title>Day {d.dayNumber}: {d.weight} lbs</title>
           </circle>
         ))}
@@ -735,8 +745,9 @@ function DayCard({ day, isToday, isEditing, onToggle, onUploadProof, onRemovePro
   if (day.isTravel) cardClass += ' travel';
   if (day.isCheckpoint) cardClass += ' checkpoint';
   if (isPast && pct === 100) cardClass += ' complete';
-  if (isPast && pct > 0 && pct < 100) cardClass += ' partial';
-  if (isPast && pct === 0 && total > 0) cardClass += ' missed';
+  else if (isPast && total > 0 && (total - done) <= 2 && done > 0) cardClass += ' mostly'; // missed 1-2 items = orange
+  else if (isPast && pct > 0 && pct < 100) cardClass += ' partial';
+  else if (isPast && pct === 0 && total > 0) cardClass += ' missed';
   
   return (
     <div className={cardClass} data-day-id={day.id}>
@@ -903,7 +914,7 @@ function Embed({ stats, days }) {
   const recent = days.filter(d => d.date <= todayStr && d.date >= getLocalDateStr(new Date(Date.now() - 7*24*60*60*1000))).reverse();
   return (
     <div className="embed">
-      <div className="emb-head"><span className="emb-icon">🎯</span><div><h2>FBI PFT Journey</h2><span>Alec Santiago</span></div></div>
+      <div className="emb-head"><span className="emb-icon">🎯</span><div><h2>GYST Journey</h2><span>Alec Santiago</span></div></div>
       <div className="emb-stats">
         <div><span className="ev">{stats.daysRemaining}</span><span className="el">Days</span></div>
         <div><span className="ev">{stats.currentStreak}🔥</span><span className="el">Streak</span></div>

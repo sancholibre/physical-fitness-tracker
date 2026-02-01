@@ -1,10 +1,10 @@
-# FBI PFT Tracker - Alec Santiago
+# GYST Tracker - Alec Santiago
 
-89-day training program to pass the FBI Physical Fitness Test.
+89-day training program to peak physical fitness.
 
-**Test Date:** April 1, 2026  
-**Start Date:** January 2, 2026  
-**Goal:** Transform from failing (8 pts) to comfortably passing (12+ pts)
+**Target Date:** April 1, 2026
+**Start Date:** January 2, 2026
+**Goal:** Get Your Shit Together - transform from baseline to peak performance
 
 ## Current Stats
 - Weight: 195 lbs → 175 lbs target

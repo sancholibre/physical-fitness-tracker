@@ -1,7 +1,7 @@
 {
-  "name": "fbi-pft-tracker",
+  "name": "gyst-tracker",
   "version": "1.0.0",
-  "description": "FBI PFT Tracker - Alec Santiago's 89-day journey",
+  "description": "GYST Tracker - Alec Santiago's 89-day fitness journey",
   "private": true,
   "dependencies": {
     "@supabase/supabase-js": "^2.89.0",
