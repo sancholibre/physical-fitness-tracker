@@ -58,9 +58,6 @@ Add `?embed=true` to the URL for a minimal progress widget:
 ></iframe>
 ```
 
-## Password
-
-Edit mode password: `agent195`
 
 ## Local Development
 
