@@ -87,3 +87,17 @@ Also deployable to Vercel or Replit as standard Create React App.
 - **Training phases** - Phase 1 (base building), Phase 2 (sharpening), Phase 3 (taper)
 - **Travel adjustments** - Jan 12-22 SF trip has modified hotel-friendly workouts
 - **Test date** - April 1, 2026
+
+## Business Build-Out Plans
+
+The `Build Out Plans/` folder contains detailed plans for productizing this tracker:
+
+- **01-General-Framework.md** - Universal architecture for AI-powered personalized program builders. Covers conversational onboarding → spec sheet extraction → program generation → ongoing adaptation. Applicable to fitness, exam prep, sobriety, creative challenges, etc.
+
+- **02-Fitness-Coach-Platform.md** - Detailed execution plan for the highest-revenue vertical: selling to online fitness coaches. Includes product spec, database schema, API design, go-to-market strategy, development sprints, and financial projections.
+
+### Core Innovation
+The key differentiator is **conversational AI onboarding** that extracts a structured "spec sheet" (goals, schedule, constraints, preferences) and generates hyper-individualized programs. The proof upload system provides accountability that competitors lack.
+
+### Target Market
+Online fitness coaches ($99-399/month B2B SaaS) who need to scale beyond 20-30 clients without burning out. Current tools are spreadsheets with UIs - no AI, no real personalization.
