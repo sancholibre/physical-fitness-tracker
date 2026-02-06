@@ -49,7 +49,7 @@ Helper functions generate week-appropriate workout details:
 ### External Services
 
 - **Supabase** - Database storing days, checkpoints, settings, lifts in `tracker_state` table (single user: `alec-santiago`)
-- **Cloudinary** - File uploads for proof images/PDFs (cloud: `djbznowhf`, preset: `fbi_pft_proof`)
+- **Cloudinary** - File uploads for proof images/PDFs (configured via environment variables)
 
 ### State Shape
 
@@ -62,7 +62,7 @@ lifts{}       // Current strength maxes
 
 ## Key Patterns
 
-- **Edit mode** - Password-protected (`agent195`), enables mutations and auto-save
+- **Edit mode** - Password-protected (via `REACT_APP_EDIT_PASSWORD` env var), enables mutations and auto-save
 - **Immutable updates** - Always spread operators, never mutate state directly
 - **Local date handling** - `getLocalDateStr()` avoids timezone issues
 - **Embed mode** - Minimal widget view triggered by `?embed=true` URL param

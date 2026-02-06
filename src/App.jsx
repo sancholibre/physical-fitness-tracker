@@ -8,16 +8,16 @@ import './App.css';
 // ============================================
 
 // Supabase config
-const SUPABASE_URL = 'https://cqpjytbpvmgzziqluhnz.supabase.co';
-const SUPABASE_ANON_KEY = 'sb_publishable_hLb04cYlJp9CASk_jk7pYQ_U43VNPFq';
+const SUPABASE_URL = process.env.REACT_APP_SUPABASE_URL;
+const SUPABASE_ANON_KEY = process.env.REACT_APP_SUPABASE_ANON_KEY;
 const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 
 const USER_ID = 'alec-santiago'; // Single user for now
-const EDIT_PASSWORD = 'agent195';
+const EDIT_PASSWORD = process.env.REACT_APP_EDIT_PASSWORD;
 
 // Cloudinary config
-const CLOUDINARY_CLOUD_NAME = 'djbznowhf';
-const CLOUDINARY_UPLOAD_PRESET = 'fbi_pft_proof';
+const CLOUDINARY_CLOUD_NAME = process.env.REACT_APP_CLOUDINARY_CLOUD_NAME;
+const CLOUDINARY_UPLOAD_PRESET = process.env.REACT_APP_CLOUDINARY_UPLOAD_PRESET;
 
 const WEIGHT_START = 190;
 const WEIGHT_TARGET = 178;
