@@ -386,8 +386,8 @@ function Stats({ stats }) {
   return (
     <div className="stats-bar">
       <div className="stat">
-        <span className="stat-val">{stats.currentStreak}🔥</span>
-        <span className="stat-lbl">Streak</span>
+        <span className="stat-val">{stats.fullDays}/{stats.totalDaysElapsed}</span>
+        <span className="stat-lbl">Full Days</span>
       </div>
       <div className="stat">
         <span className="stat-val">P{stats.currentPhase}</span>
@@ -569,7 +569,9 @@ function PhaseInfo() {
 
 function WeightSparkline({ days, show }) {
   const [expanded, setExpanded] = useState(false);
-  
+  const [fullscreen, setFullscreen] = useState(false);
+  const [selectedPoint, setSelectedPoint] = useState(null);
+
   // Get all days with weight data
   const weightData = useMemo(() => {
     return days
@@ -582,69 +584,178 @@ function WeightSparkline({ days, show }) {
       .filter(d => !isNaN(d.weight))
       .sort((a, b) => a.dayNumber - b.dayNumber);
   }, [days]);
-  
+
   if (!show || weightData.length === 0) return null;
-  
+
   const weights = weightData.map(d => d.weight);
   const minW = Math.min(...weights, WEIGHT_TARGET) - 2;
   const maxW = Math.max(...weights, WEIGHT_START) + 2;
   const range = maxW - minW;
-  
-  // SVG dimensions
-  const width = 240;
-  const height = expanded ? 120 : 60;
-  const padding = { top: 10, right: 10, bottom: expanded ? 20 : 10, left: 30 };
-  const graphWidth = width - padding.left - padding.right;
-  const graphHeight = height - padding.top - padding.bottom;
-  
-  // Scale functions
-  const xScale = (dayNum) => padding.left + ((dayNum - 1) / 88) * graphWidth;
-  const yScale = (w) => padding.top + graphHeight - ((w - minW) / range) * graphHeight;
-  
-  // Target line y position
-  const targetY = yScale(WEIGHT_TARGET);
-  const startY = yScale(WEIGHT_START);
-  
+
+  const renderChart = (isFullscreen) => {
+    const w = isFullscreen ? 700 : 240;
+    const h = isFullscreen ? 350 : (expanded ? 120 : 60);
+    const pad = isFullscreen
+      ? { top: 20, right: 30, bottom: 40, left: 50 }
+      : { top: 10, right: 10, bottom: expanded ? 20 : 10, left: 30 };
+    const gw = w - pad.left - pad.right;
+    const gh = h - pad.top - pad.bottom;
+    const xScale = (dayNum) => pad.left + ((dayNum - 1) / 88) * gw;
+    const yScale = (wt) => pad.top + gh - ((wt - minW) / range) * gh;
+    const targetY = yScale(WEIGHT_TARGET);
+    const startY = yScale(WEIGHT_START);
+    const dotRadius = isFullscreen ? 6 : (expanded ? 4 : 3);
+
+    // Build line path connecting all points
+    const linePath = weightData.map((d, i) => {
+      const x = xScale(d.dayNumber);
+      const y = yScale(d.weight);
+      return `${i === 0 ? 'M' : 'L'}${x},${y}`;
+    }).join(' ');
+
+    return (
+      <svg width={w} height={h} className="sparkline-svg" viewBox={`0 0 ${w} ${h}`}>
+        {/* Grid lines */}
+        {(expanded || isFullscreen) && (
+          <>
+            <line x1={pad.left} y1={targetY} x2={w - pad.right} y2={targetY} stroke="#22c55e" strokeWidth="1" strokeDasharray="4,4" opacity="0.5" />
+            <line x1={pad.left} y1={startY} x2={w - pad.right} y2={startY} stroke="#ef4444" strokeWidth="1" strokeDasharray="4,4" opacity="0.3" />
+            <text x={pad.left - 4} y={targetY + 3} fontSize={isFullscreen ? 12 : 9} fill="#22c55e" textAnchor="end">{WEIGHT_TARGET}</text>
+            <text x={pad.left - 4} y={startY + 3} fontSize={isFullscreen ? 12 : 9} fill="#ef4444" textAnchor="end">{WEIGHT_START}</text>
+          </>
+        )}
+
+        {/* Fullscreen: intermediate Y-axis labels */}
+        {isFullscreen && (() => {
+          const step = range > 10 ? 5 : 2;
+          const labels = [];
+          for (let v = Math.ceil(minW / step) * step; v <= maxW; v += step) {
+            if (Math.abs(v - WEIGHT_TARGET) < step * 0.4 || Math.abs(v - WEIGHT_START) < step * 0.4) continue;
+            labels.push(v);
+          }
+          return labels.map(v => (
+            <g key={v}>
+              <line x1={pad.left} y1={yScale(v)} x2={w - pad.right} y2={yScale(v)} stroke="#2a2a2d" strokeWidth="1" strokeDasharray="2,4" />
+              <text x={pad.left - 4} y={yScale(v) + 4} fontSize="11" fill="#888" textAnchor="end">{v}</text>
+            </g>
+          ));
+        })()}
+
+        {/* Fullscreen: X-axis week labels */}
+        {isFullscreen && [1, 14, 28, 42, 56, 70, 84, 89].map(d => (
+          <text key={d} x={xScale(d)} y={h - 8} fontSize="11" fill="#888" textAnchor="middle">
+            {d === 1 ? 'D1' : d === 89 ? 'D89' : `W${Math.ceil(d / 7)}`}
+          </text>
+        ))}
+
+        {/* Ideal pace line (start to target) */}
+        {(expanded || isFullscreen) && (
+          <line
+            x1={xScale(1)} y1={yScale(WEIGHT_START)}
+            x2={xScale(89)} y2={yScale(WEIGHT_TARGET)}
+            stroke="#8b5cf6" strokeWidth="1" strokeDasharray="6,3" opacity="0.35"
+          />
+        )}
+
+        {/* Projection line from current trend */}
+        {(expanded || isFullscreen) && weightData.length >= 2 && (() => {
+          const first = weightData[0];
+          const last = weightData[weightData.length - 1];
+          const daysDiff = last.dayNumber - first.dayNumber;
+          if (daysDiff <= 0) return null;
+          const rate = (last.weight - first.weight) / daysDiff;
+          const projectedEnd = last.weight + rate * (89 - last.dayNumber);
+          const clampedEnd = Math.max(minW, Math.min(maxW, projectedEnd));
+          return (
+            <line
+              x1={xScale(last.dayNumber)} y1={yScale(last.weight)}
+              x2={xScale(89)} y2={yScale(clampedEnd)}
+              stroke="#f59e0b" strokeWidth={isFullscreen ? 2 : 1} strokeDasharray="4,4" opacity="0.6"
+            />
+          );
+        })()}
+
+        {/* Connecting line */}
+        {weightData.length > 1 && (
+          <path d={linePath} fill="none" stroke="#3b82f6" strokeWidth={isFullscreen ? 2 : 1.5} opacity="0.5" />
+        )}
+
+        {/* Data points — clickable */}
+        {weightData.map((d, i) => {
+          const isLast = i === weightData.length - 1;
+          const isSelected = selectedPoint?.dayNumber === d.dayNumber;
+          return (
+            <g key={i} style={{ cursor: 'pointer' }} onClick={(e) => { e.stopPropagation(); setSelectedPoint(isSelected ? null : d); }}>
+              <circle cx={xScale(d.dayNumber)} cy={yScale(d.weight)} r={dotRadius + (isFullscreen ? 6 : 4)} fill="transparent" />
+              <circle
+                cx={xScale(d.dayNumber)} cy={yScale(d.weight)}
+                r={isSelected ? dotRadius + 2 : dotRadius}
+                fill={isLast ? '#22c55e' : '#3b82f6'}
+                stroke={isSelected ? '#fff' : '#0a0a0b'}
+                strokeWidth={isSelected ? 2 : 1}
+              />
+              {/* Tooltip on selected */}
+              {isSelected && (
+                <>
+                  <rect
+                    x={xScale(d.dayNumber) - (isFullscreen ? 55 : 40)}
+                    y={yScale(d.weight) - (isFullscreen ? 32 : 26)}
+                    width={isFullscreen ? 110 : 80} height={isFullscreen ? 24 : 18}
+                    rx="4" fill="#1a1a1d" stroke="#3b82f6" strokeWidth="1"
+                  />
+                  <text
+                    x={xScale(d.dayNumber)} y={yScale(d.weight) - (isFullscreen ? 15 : 12)}
+                    fontSize={isFullscreen ? 12 : 9} fill="#e5e5e5" textAnchor="middle" fontFamily="JetBrains Mono, monospace"
+                  >
+                    {new Date(d.date + 'T12:00:00').toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}: {d.weight} lbs
+                  </text>
+                </>
+              )}
+            </g>
+          );
+        })}
+      </svg>
+    );
+  };
+
   return (
     <div className="weight-sparkline">
       <div className="sparkline-header" onClick={() => setExpanded(!expanded)}>
         <span>📈 Trend</span>
-        <span className="sparkline-toggle">{expanded ? '▼' : '▶'}</span>
+        <div className="sparkline-actions">
+          <span className="sparkline-expand-btn" onClick={(e) => { e.stopPropagation(); setSelectedPoint(null); setFullscreen(true); }} title="View fullscreen">⛶</span>
+          <span className="sparkline-toggle">{expanded ? '▼' : '▶'}</span>
+        </div>
       </div>
-      <svg width={width} height={height} className="sparkline-svg">
-        {/* Grid lines (expanded only) */}
-        {expanded && (
-          <>
-            <line x1={padding.left} y1={targetY} x2={width - padding.right} y2={targetY} stroke="#22c55e" strokeWidth="1" strokeDasharray="4,4" opacity="0.5" />
-            <line x1={padding.left} y1={startY} x2={width - padding.right} y2={startY} stroke="#ef4444" strokeWidth="1" strokeDasharray="4,4" opacity="0.3" />
-            <text x={padding.left - 4} y={targetY + 3} fontSize="9" fill="#22c55e" textAnchor="end">{WEIGHT_TARGET}</text>
-            <text x={padding.left - 4} y={startY + 3} fontSize="9" fill="#ef4444" textAnchor="end">{WEIGHT_START}</text>
-          </>
-        )}
-        
-        {/* Data points (always visible, no connecting line) */}
-        {weightData.map((d, i) => (
-          <circle key={i} cx={xScale(d.dayNumber)} cy={yScale(d.weight)} r={expanded ? 4 : 3} fill="#3b82f6" stroke="#0a0a0b" strokeWidth="1">
-            <title>Day {d.dayNumber}: {d.weight} lbs</title>
-          </circle>
-        ))}
-        
-        {/* Latest point */}
-        {weightData.length > 0 && (
-          <circle 
-            cx={xScale(weightData[weightData.length - 1].dayNumber)} 
-            cy={yScale(weightData[weightData.length - 1].weight)} 
-            r="4" 
-            fill="#22c55e" 
-            stroke="#0a0a0b" 
-            strokeWidth="2"
-          />
-        )}
-      </svg>
+      {renderChart(false)}
       {expanded && (
         <div className="sparkline-legend">
           <span className="legend-item"><span className="dot target"></span>Target: {WEIGHT_TARGET}</span>
           <span className="legend-item"><span className="dot start"></span>Start: {WEIGHT_START}</span>
+          <span className="legend-item"><span className="dot pace"></span>Ideal</span>
+          <span className="legend-item"><span className="dot projection"></span>Projected</span>
+        </div>
+      )}
+      {/* Fullscreen modal */}
+      {fullscreen && (
+        <div className="weight-modal-bg" onClick={() => { setFullscreen(false); setSelectedPoint(null); }}>
+          <div className="weight-modal" onClick={e => e.stopPropagation()}>
+            <div className="weight-modal-header">
+              <span>Weight Trend — {weightData.length} entries</span>
+              <button onClick={() => { setFullscreen(false); setSelectedPoint(null); }}>&times;</button>
+            </div>
+            <div className="weight-modal-body">
+              {renderChart(true)}
+              <div className="weight-modal-legend">
+                <span className="legend-item"><span className="dot target"></span>Target: {WEIGHT_TARGET} lbs</span>
+                <span className="legend-item"><span className="dot start"></span>Start: {WEIGHT_START} lbs</span>
+                <span className="legend-item"><span className="dot current"></span>Current: {weightData[weightData.length - 1].weight} lbs</span>
+                <span className="legend-item"><span className="dot pace"></span>Ideal Pace</span>
+                <span className="legend-item"><span className="dot projection"></span>Projected</span>
+              </div>
+              <div className="weight-modal-hint">Click any dot to see the exact weight and date</div>
+            </div>
+          </div>
         </div>
       )}
     </div>
@@ -728,7 +839,7 @@ function Weight({ current, show, days, onLogTodayWeight, isEditing, todayWeight 
   );
 }
 
-function DayCard({ day, isToday, isEditing, onToggle, onUploadProof, onRemoveProof, onUpdateWeight }) {
+function DayCard({ day, isToday, isEditing, onToggle, onUploadProof, onRemoveProof, onUpdateWeight, onUpdateNotes, onUpdateSkipReason }) {
   const dt = new Date(day.date + 'T12:00:00');
   const dayName = dt.toLocaleDateString('en-US', { weekday: 'short' });
   const monthDay = dt.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
@@ -739,16 +850,16 @@ function DayCard({ day, isToday, isEditing, onToggle, onUploadProof, onRemovePro
   const todayStr = getLocalDateStr();
   const isPast = day.date < todayStr;
   const hasAllProof = day.proofFiles?.appleHealth && day.proofFiles?.cronometer;
-  
+
   let cardClass = 'day-card';
   if (isToday) cardClass += ' today';
   if (day.isTravel) cardClass += ' travel';
   if (day.isCheckpoint) cardClass += ' checkpoint';
   if (isPast && pct === 100) cardClass += ' complete';
-  else if (isPast && total > 0 && (total - done) <= 2 && done > 0) cardClass += ' mostly'; // missed 1-2 items = orange
+  else if (isPast && total > 0 && (total - done) <= 2 && done > 0) cardClass += ' mostly';
   else if (isPast && pct > 0 && pct < 100) cardClass += ' partial';
   else if (isPast && pct === 0 && total > 0) cardClass += ' missed';
-  
+
   return (
     <div className={cardClass} data-day-id={day.id}>
       <div className="day-head">
@@ -764,11 +875,11 @@ function DayCard({ day, isToday, isEditing, onToggle, onUploadProof, onRemovePro
         <div className="weight-row">
           <span className="weight-label">⚖️ Weight</span>
           {isEditing ? (
-            <input 
-              type="number" 
-              step="0.1" 
-              className="weight-input" 
-              value={day.weight || ''} 
+            <input
+              type="number"
+              step="0.1"
+              className="weight-input"
+              value={day.weight || ''}
               onChange={(e) => onUpdateWeight(day.id, e.target.value)}
               placeholder="—"
             />
@@ -776,10 +887,26 @@ function DayCard({ day, isToday, isEditing, onToggle, onUploadProof, onRemovePro
             <span className="weight-display">{day.weight ? `${day.weight} lbs` : '—'}</span>
           )}
         </div>
-        
+
         {day.activities?.map((a, i) => (
-          <div key={a.id || i} className={`item ${a.completed ? 'done' : ''} t-${a.type}`} onClick={() => isEditing && onToggle(day.id, 'activities', i)}>
-            <span className="chk">{a.completed ? '✔' : '○'}</span><span className="nm">{a.name}</span>
+          <div key={a.id || i} className="item-wrapper">
+            <div className={`item ${a.completed ? 'done' : ''} t-${a.type}`} onClick={() => isEditing && onToggle(day.id, 'activities', i)}>
+              <span className="chk">{a.completed ? '✔' : '○'}</span><span className="nm">{a.name}</span>
+            </div>
+            {isPast && !a.completed && (
+              isEditing ? (
+                <input
+                  type="text"
+                  className="skip-input-inline"
+                  value={a.skipReason || ''}
+                  onChange={(e) => onUpdateSkipReason(day.id, 'activities', i, e.target.value)}
+                  placeholder="Why skipped?"
+                  onClick={(e) => e.stopPropagation()}
+                />
+              ) : a.skipReason ? (
+                <span className="skip-text-inline">{a.skipReason}</span>
+              ) : null
+            )}
           </div>
         ))}
         {day.habits?.length > 0 && (
@@ -787,8 +914,24 @@ function DayCard({ day, isToday, isEditing, onToggle, onUploadProof, onRemovePro
             <div className="hab-label">Daily</div>
             <div className="hab-grid">
               {day.habits.map((h, i) => (
-                <div key={h.id || i} className={`hab ${h.completed ? 'done' : ''}`} onClick={() => isEditing && onToggle(day.id, 'habits', i)}>
-                  <span className="hchk">{h.completed ? '✔' : '○'}</span><span className="hnm">{h.name}</span>
+                <div key={h.id || i} className="hab-wrapper">
+                  <div className={`hab ${h.completed ? 'done' : ''}`} onClick={() => isEditing && onToggle(day.id, 'habits', i)}>
+                    <span className="hchk">{h.completed ? '✔' : '○'}</span><span className="hnm">{h.name}</span>
+                  </div>
+                  {isPast && !h.completed && (
+                    isEditing ? (
+                      <input
+                        type="text"
+                        className="skip-input-inline hab-skip"
+                        value={h.skipReason || ''}
+                        onChange={(e) => onUpdateSkipReason(day.id, 'habits', i, e.target.value)}
+                        placeholder="Why?"
+                        onClick={(e) => e.stopPropagation()}
+                      />
+                    ) : h.skipReason ? (
+                      <span className="skip-text-inline">{h.skipReason}</span>
+                    ) : null
+                  )}
                 </div>
               ))}
             </div>
@@ -803,18 +946,40 @@ function DayCard({ day, isToday, isEditing, onToggle, onUploadProof, onRemovePro
             </div>
           </div>
         )}
+        {/* Day-level notes */}
+        {day.notes ? (
+          <div className="skip-reason">
+            {isEditing ? (
+              <>
+                <span className="skip-label">📝 Notes</span>
+                <input
+                  type="text"
+                  className="skip-input"
+                  value={day.notes || ''}
+                  onChange={(e) => onUpdateNotes(day.id, e.target.value)}
+                  placeholder="Day notes..."
+                />
+              </>
+            ) : (
+              <div className="skip-display">
+                <span className="skip-label">📝</span>
+                <span className="skip-text">{day.notes}</span>
+              </div>
+            )}
+          </div>
+        ) : null}
       </div>
     </div>
   );
 }
 
-function Week({ weekNum, days, isEditing, onToggle, onUploadProof, onRemoveProof, onUpdateWeight }) {
+function Week({ weekNum, days, isEditing, onToggle, onUploadProof, onRemoveProof, onUpdateWeight, onUpdateNotes, onUpdateSkipReason }) {
   const todayStr = getLocalDateStr();
   const phase = days[0]?.phase || 1;
   return (
     <div className="week">
       <div className="week-head"><h2>Week {weekNum}</h2><span className="ph">Phase {phase}: {phase === 1 ? 'Base Building' : phase === 2 ? 'Sharpening' : 'Taper'}</span></div>
-      <div className="week-days">{days.map(d => <DayCard key={d.id} day={d} isToday={d.date === todayStr} isEditing={isEditing} onToggle={onToggle} onUploadProof={onUploadProof} onRemoveProof={onRemoveProof} onUpdateWeight={onUpdateWeight} />)}</div>
+      <div className="week-days">{days.map(d => <DayCard key={d.id} day={d} isToday={d.date === todayStr} isEditing={isEditing} onToggle={onToggle} onUploadProof={onUploadProof} onRemoveProof={onRemoveProof} onUpdateWeight={onUpdateWeight} onUpdateNotes={onUpdateNotes} onUpdateSkipReason={onUpdateSkipReason} />)}</div>
     </div>
   );
 }
@@ -917,7 +1082,7 @@ function Embed({ stats, days }) {
       <div className="emb-head"><span className="emb-icon">🎯</span><div><h2>GYST Journey</h2><span>Alec Santiago</span></div></div>
       <div className="emb-stats">
         <div><span className="ev">{stats.daysRemaining}</span><span className="el">Days</span></div>
-        <div><span className="ev">{stats.currentStreak}🔥</span><span className="el">Streak</span></div>
+        <div><span className="ev">{stats.fullDays}/{stats.totalDaysElapsed}</span><span className="el">Full Days</span></div>
         <div><span className="ev">{stats.totalCompletion}%</span><span className="el">Done</span></div>
       </div>
       <div className="emb-bar"><div style={{ width: `${stats.totalCompletion}%` }}></div></div>
@@ -984,11 +1149,13 @@ export default function App() {
                 ...genDay,
                 activities: genDay.activities.map((act, i) => ({
                   ...act,
-                  completed: storedDay.activities?.[i]?.completed || false
+                  completed: storedDay.activities?.[i]?.completed || false,
+                  skipReason: storedDay.activities?.[i]?.skipReason || ''
                 })),
                 habits: genDay.habits.map((hab, i) => ({
                   ...hab,
-                  completed: storedDay.habits?.[i]?.completed || false
+                  completed: storedDay.habits?.[i]?.completed || false,
+                  skipReason: storedDay.habits?.[i]?.skipReason || ''
                 })),
                 proofFiles: storedDay.proofFiles || genDay.proofFiles,
                 weight: storedDay.weight || null, // NEW: preserve weight
@@ -1057,33 +1224,45 @@ export default function App() {
     const currentPhase = td?.phase || 1;
     const currentWeek = td?.weekNumber || 1;
     
-    let currentStreak = 0;
-    const sorted = days.filter(d => d.date <= todayStr).sort((a,b) => b.date.localeCompare(a.date));
-    for (const d of sorted) {
-      const items = [...(d.activities||[]),...(d.habits||[])];
-      const allItemsDone = items.length === 0 || items.every(x=>x.completed);
-      const proofDone = settings.requireProof && !d.isTravel ? (d.proofFiles?.appleHealth && d.proofFiles?.cronometer) : true;
-      if (allItemsDone && proofDone) { if (items.length) currentStreak++; } else break;
-    }
-    
     const past = days.filter(d => d.date <= todayStr);
+    const totalDaysElapsed = past.length;
+    let fullDays = 0;
     let tot = 0, done = 0;
-    past.forEach(d => { const i = [...(d.activities||[]),...(d.habits||[])]; tot += i.length; done += i.filter(x=>x.completed).length; });
+    past.forEach(d => {
+      const i = [...(d.activities||[]),...(d.habits||[])];
+      tot += i.length;
+      done += i.filter(x=>x.completed).length;
+      if (i.length > 0 && i.every(x => x.completed)) fullDays++;
+    });
     const totalCompletion = tot > 0 ? Math.round((done/tot)*100) : 0;
-    
-    return { daysRemaining, currentPhase, currentWeek, currentStreak, totalCompletion, currentWeight };
-  }, [days, settings.requireProof, currentWeight]);
+
+    return { daysRemaining, currentPhase, currentWeek, fullDays, totalDaysElapsed, totalCompletion, currentWeight };
+  }, [days, currentWeight]);
   
   const weekGroups = useMemo(() => { const g = {}; days.forEach(d => { if (!g[d.weekNumber]) g[d.weekNumber] = []; g[d.weekNumber].push(d); }); return g; }, [days]);
   
   const onToggle = (dayId, section, idx) => { setDays(prev => prev.map(d => { if (d.id !== dayId) return d; const arr = [...d[section]]; arr[idx] = { ...arr[idx], completed: !arr[idx].completed }; return { ...d, [section]: arr }; })); };
   const onUploadProof = useCallback((dayId, type, url) => { setDays(prev => prev.map(d => { if (d.id !== dayId) return d; return { ...d, proofFiles: { ...d.proofFiles, [type]: url, uploadedAt: new Date().toISOString() } }; })); }, []);
   const onRemoveProof = useCallback((dayId, type) => { setDays(prev => prev.map(d => { if (d.id !== dayId) return d; return { ...d, proofFiles: { ...d.proofFiles, [type]: null } }; })); }, []);
-  const onUpdateWeight = useCallback((dayId, weight) => { 
-    setDays(prev => prev.map(d => { 
-      if (d.id !== dayId) return d; 
-      return { ...d, weight: weight === '' ? null : weight }; 
-    })); 
+  const onUpdateWeight = useCallback((dayId, weight) => {
+    setDays(prev => prev.map(d => {
+      if (d.id !== dayId) return d;
+      return { ...d, weight: weight === '' ? null : weight };
+    }));
+  }, []);
+  const onUpdateNotes = useCallback((dayId, notes) => {
+    setDays(prev => prev.map(d => {
+      if (d.id !== dayId) return d;
+      return { ...d, notes };
+    }));
+  }, []);
+  const onUpdateSkipReason = useCallback((dayId, section, idx, reason) => {
+    setDays(prev => prev.map(d => {
+      if (d.id !== dayId) return d;
+      const arr = [...d[section]];
+      arr[idx] = { ...arr[idx], skipReason: reason };
+      return { ...d, [section]: arr };
+    }));
   }, []);
   const onLogTodayWeight = useCallback((weight) => {
     const todayStr = getLocalDateStr();
@@ -1159,9 +1338,10 @@ export default function App() {
           <div className="share"><h4>📤 Embed</h4><code>?embed=true</code></div>
           <SocialLinks />
         </aside>
-        <main className="main"><Week weekNum={displayWeek} days={weekGroups[displayWeek]||[]} isEditing={isEditing} onToggle={onToggle} onUploadProof={onUploadProof} onRemoveProof={onRemoveProof} onUpdateWeight={onUpdateWeight} /></main>
+        <main className="main"><Week weekNum={displayWeek} days={weekGroups[displayWeek]||[]} isEditing={isEditing} onToggle={onToggle} onUploadProof={onUploadProof} onRemoveProof={onRemoveProof} onUpdateWeight={onUpdateWeight} onUpdateNotes={onUpdateNotes} onUpdateSkipReason={onUpdateSkipReason} /></main>
       </div>
       {modal && <Modal week={modal} onSave={onSaveCp} onCancel={()=>setModal(null)} />}
+      <button className="fab-today" onClick={onGoToToday} title="Go to Today">📍</button>
     </div>
   );
 }
