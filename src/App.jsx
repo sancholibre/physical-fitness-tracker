@@ -125,12 +125,13 @@ async function uploadWithRetry(file, onProgress, maxRetries = 3) {
 
 function generateAllDays() {
   const days = [];
-  const start = new Date('2026-01-02');
-  const end = new Date('2026-04-01');
+  // Use local dates to avoid UTC/DST timezone bugs
+  const start = new Date(2026, 0, 2); // Jan 2, 2026 local
+  const end = new Date(2026, 3, 1);   // Apr 1, 2026 local
   let dayNum = 1;
-  
+
   for (let d = new Date(start); d <= end; d.setDate(d.getDate() + 1)) {
-    const dateStr = d.toISOString().split('T')[0];
+    const dateStr = getLocalDateStr(d);
     const dow = d.getDay();
     const weekNum = Math.ceil(dayNum / 7);
     const phase = weekNum <= 6 ? 1 : weekNum <= 10 ? 2 : 3;
