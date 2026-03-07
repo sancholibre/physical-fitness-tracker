@@ -147,7 +147,7 @@ function generateAllDays() {
       habits: [],
       location: 'Denver',
       isTravel: false,
-      isCheckpoint: weekNum % 2 === 0 && dow === 6 && weekNum <= 12,
+      isCheckpoint: weekNum % 2 === 0 && dow === 0 && weekNum <= 12,
       notes: '',
       weight: null, // NEW: daily weight tracking
       proofFiles: {
@@ -225,31 +225,31 @@ function getRegularActivities(dow, weekNum, phase) {
   if (phase === 3) {
     if (weekNum === 11) {
       const w11 = {
-        0: [{ id: 'rest', type: 'rest', name: '😴 Full Rest', completed: false }],
-        1: [{ id: 'z2', type: 'zone2', name: '🏃 Zone 2 - 30min (easy)', completed: false }, { id: 'lift', type: 'lifting', name: '🏋️ Upper Push (Light)', completed: false }],
-        2: [{ id: 'lift', type: 'lifting', name: '🏋️ Lower (2 sets each)', completed: false }],
-        3: [{ id: 'z2', type: 'zone2', name: '🏃 Zone 2 - 30min', completed: false }],
-        4: [{ id: 'lift', type: 'lifting', name: '🏋️ Upper Pull (Light)', completed: false }],
-        5: [{ id: 'int', type: 'intervals', name: '🔥 4x400m @ race pace', completed: false }],
-        6: [{ id: 'easy', type: 'zone2', name: '🏃 Easy Jog - 15min', completed: false }],
+        0: [{ id: 'easy', type: 'zone2', name: '🏃 Easy Jog - 15min', completed: false }],
+        1: [{ id: 'rest', type: 'rest', name: '😴 Full Rest', completed: false }],
+        2: [{ id: 'z2', type: 'zone2', name: '🏃 Zone 2 - 30min (easy)', completed: false }, { id: 'lift', type: 'lifting', name: '🏋️ Upper Push (Light)', completed: false }],
+        3: [{ id: 'lift', type: 'lifting', name: '🏋️ Lower (2 sets each)', completed: false }],
+        4: [{ id: 'z2', type: 'zone2', name: '🏃 Zone 2 - 30min', completed: false }],
+        5: [{ id: 'lift', type: 'lifting', name: '🏋️ Upper Pull (Light)', completed: false }],
+        6: [{ id: 'int', type: 'intervals', name: '🔥 4x400m @ race pace', completed: false }],
       };
       return w11[dow] || [];
     }
     if (weekNum === 12) {
       const w12 = {
-        0: [{ id: 'rest', type: 'rest', name: '😴 REST', completed: false }],
-        1: [{ id: 'easy', type: 'zone2', name: '🏃 Easy Jog - 20min', completed: false }],
-        2: [{ id: 'lift', type: 'lifting', name: '🏋️ Light Full Body', completed: false }],
-        3: [{ id: 'strides', type: 'strides', name: '🏃 Strides - 4x100m only', completed: false }],
-        4: [{ id: 'rest', type: 'rest', name: '😴 REST', completed: false }],
+        0: [{ id: 'rest', type: 'rest', name: '😴 REST - Day before test', completed: false }],
+        1: [{ id: 'rest', type: 'rest', name: '😴 REST', completed: false }],
+        2: [{ id: 'easy', type: 'zone2', name: '🏃 Easy Jog - 20min', completed: false }],
+        3: [{ id: 'lift', type: 'lifting', name: '🏋️ Light Full Body', completed: false }],
+        4: [{ id: 'strides', type: 'strides', name: '🏃 Strides - 4x100m only', completed: false }],
         5: [{ id: 'rest', type: 'rest', name: '😴 REST', completed: false }],
-        6: [{ id: 'rest', type: 'rest', name: '😴 REST - Day before test', completed: false }],
+        6: [{ id: 'rest', type: 'rest', name: '😴 REST', completed: false }],
       };
       return w12[dow] || [];
     }
   }
   
-  if (phase === 2 && dow === 3 && (weekNum === 8 || weekNum === 10)) {
+  if (phase === 2 && dow === 4 && (weekNum === 8 || weekNum === 10)) {
     return [
       { id: 'tt', type: 'timetrial', name: '⏱️ 1.5mi TIME TRIAL', completed: false },
       { id: 'gtg', type: 'gtg', name: `💪 Push-up GTG - ${gtgDetail}`, completed: false },
@@ -257,26 +257,26 @@ function getRegularActivities(dow, weekNum, phase) {
   }
   
   const schedule = {
-    0: [{ id: 'rest', type: 'rest', name: '😴 Full Rest Day', completed: false }],
-    1: [
+    0: [
+      { id: 'tempo', type: 'tempo', name: `🏃 Tempo - ${tempoDetail}`, completed: false },
+      { id: 'max', type: 'maxtest', name: '📊 Max Push-up Test', completed: false },
+    ],
+    1: [{ id: 'rest', type: 'rest', name: '😴 Full Rest Day', completed: false }],
+    2: [
       { id: 'z2', type: 'zone2', name: '🏃 Zone 2 - 45min (AM)', completed: false },
       { id: 'lift', type: 'lifting', name: '🏋️ Upper Push (Bench 3x5, OHP 3x6, Dips 2x10)', completed: false },
       { id: 'gtg', type: 'gtg', name: `💪 Push-up GTG - ${gtgDetail}`, completed: false },
     ],
-    2: [{ id: 'lift', type: 'lifting', name: '🏋️ Lower (Squat 3x5, RDL 3x8, BSS 2x8)', completed: false }],
-    3: [
+    3: [{ id: 'lift', type: 'lifting', name: '🏋️ Lower (Squat 3x5, RDL 3x8, BSS 2x8)', completed: false }],
+    4: [
       { id: 'z2', type: 'zone2', name: '🏃 Zone 2 - 50min', completed: false },
       { id: 'strides', type: 'strides', name: '🏃 Strides - 4x100m after', completed: false },
       { id: 'gtg', type: 'gtg', name: `💪 Push-up GTG - ${gtgDetail}`, completed: false },
     ],
-    4: [{ id: 'lift', type: 'lifting', name: '🏋️ Pull Day (Deadlift 3x5, Pull-ups 4x8, Row 3x8)', completed: false }],
-    5: [
+    5: [{ id: 'lift', type: 'lifting', name: '🏋️ Pull Day (Deadlift 3x5, Pull-ups 4x8, Row 3x8)', completed: false }],
+    6: [
       { id: 'int', type: 'intervals', name: `🔥 Intervals - ${intervalDetail}`, completed: false },
       { id: 'gtg', type: 'gtg', name: `💪 Push-up GTG - ${gtgDetail}`, completed: false },
-    ],
-    6: [
-      { id: 'tempo', type: 'tempo', name: `🏃 Tempo - ${tempoDetail}`, completed: false },
-      { id: 'max', type: 'maxtest', name: '📊 Max Push-up Test', completed: false },
     ],
   };
   
