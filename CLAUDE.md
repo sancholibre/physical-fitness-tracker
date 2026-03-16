@@ -44,7 +44,7 @@ All application logic lives in `src/App.jsx` (~1500+ lines). This is intentional
 
 - **App** (L1121) - Main component, routes between embed view (`?embed=true`) and full app
 - **Header** (L364) - Top header with stats summary and "Go to Today" button
-- **Stats** (L385) - Training %, Habits %, Thru Arc %, Miles (placeholder)
+- **Stats** (L385) - Training %, Habits %, Thru Arc %, Miles (from Strava)
 - **DayCard** (L842) - Individual day with activities, habits, proof uploads, per-activity skip reasons
 - **Week** (L976) - Container for 7 DayCards
 - **Checkpoints** (L987) - Bi-weekly test milestones (Weeks 2,4,6,8,10,12)
@@ -86,20 +86,32 @@ Key constants:
 
 - **Supabase** - Database storing days, checkpoints, settings, lifts in `tracker_state` table (single user: `alec-santiago`)
 - **Cloudinary** - File uploads for proof images/PDFs (configured via environment variables)
-- **Strava API** (planned) - OAuth2 integration for cumulative running miles
+- **Strava API** (live) - OAuth2 integration for cumulative running miles, synced to `strava_activities` table
 - **Health Auto Export** (planned) - iOS app webhook for VO2 max, resting HR, HRV from Apple Health
 
-### Supabase Edge Functions (In Progress)
+### Supabase Edge Functions
 
-The `supabase/` directory has been initialized (`supabase init`). Edge Functions are planned but not yet deployed:
-- `strava-auth` — OAuth redirect to Strava
-- `strava-callback` — Token exchange + storage
-- `strava-sync` — Activity fetching + upsert to `strava_activities` table
+The `supabase/` directory is linked to project `cqpjytbpvmgzziqluhnz`. Deployed functions:
+- `strava-auth` — OAuth redirect to Strava (no JWT verification)
+- `strava-callback` — Token exchange + storage in `strava_tokens`, redirects to app
+- `strava-sync` — Fetches all runs from Strava API (paginated), upserts to `strava_activities`, includes CORS headers and auto token refresh
+
+Planned but not yet deployed:
 - `health-webhook` — Receives Health Auto Export POST data to `health_metrics` table
 
-**Blocked on**: `supabase login` (interactive browser auth) → `supabase link --project-ref cqpjytbpvmgzziqluhnz`
+### Supabase Tables
 
-See `.claude/plans/kind-marinating-metcalfe.md` for full implementation plan.
+- `tracker_state` — Main app state (days, checkpoints, settings, lifts) keyed by user_id
+- `strava_tokens` — OAuth access/refresh tokens (RLS: service_role only, no anon access)
+- `strava_activities` — Synced run activities with distance, time, date (RLS: anon SELECT allowed)
+
+### Strava Integration Flow
+
+1. User clicks "Connect Strava" (edit mode) → `strava-auth` redirects to Strava OAuth
+2. Strava redirects back → `strava-callback` exchanges code for tokens, stores in `strava_tokens`
+3. User clicks "Sync Strava" (1hr throttle via localStorage) → `strava-sync` fetches all runs, upserts to `strava_activities`
+4. `fetchStravaMiles()` queries `strava_activities` filtered to 2026, sums distances → Miles stat
+5. Miles also auto-loaded on page mount
 
 ### State Shape
 
@@ -145,6 +157,10 @@ Configured for Railway (`railway.json`):
   "deploy": { "startCommand": "npx serve -s build -l $PORT" }
 }
 ```
+
+**Live URL**: `physical-fitness-tracker-production.up.railway.app`
+
+Supabase Edge Functions deployed separately via `supabase functions deploy <name> --no-verify-jwt`.
 
 Also deployable to Vercel or Replit as standard Create React App.
 
