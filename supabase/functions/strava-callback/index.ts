@@ -59,6 +59,6 @@ Deno.serve(async (req) => {
   // Redirect back to the app
   return new Response(null, {
     status: 302,
-    headers: { Location: "https://physical-fitness-tracker.up.railway.app/" },
+    headers: { Location: "https://physical-fitness-tracker-production.up.railway.app/" },
   });
 });

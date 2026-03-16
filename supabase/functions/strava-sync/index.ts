@@ -2,8 +2,24 @@ import "@supabase/functions-js/edge-runtime.d.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 
 const STRAVA_API = "https://www.strava.com/api/v3";
+const corsHeaders = {
+  "Access-Control-Allow-Origin": "*",
+  "Access-Control-Allow-Methods": "POST, OPTIONS",
+  "Access-Control-Allow-Headers": "Content-Type",
+};
+
+function jsonResponse(body: object, status = 200) {
+  return new Response(JSON.stringify(body), {
+    status,
+    headers: { ...corsHeaders, "Content-Type": "application/json" },
+  });
+}
 
 Deno.serve(async (_req) => {
+  if (_req.method === "OPTIONS") {
+    return new Response(null, { status: 204, headers: corsHeaders });
+  }
+
   const supabase = createClient(
     Deno.env.get("SUPABASE_URL")!,
     Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!
@@ -17,9 +33,9 @@ Deno.serve(async (_req) => {
     .single();
 
   if (tokenErr || !tokenRow) {
-    return Response.json(
+    return jsonResponse(
       { error: "No Strava tokens found. Connect Strava first." },
-      { status: 401 }
+      401
     );
   }
 
@@ -40,10 +56,7 @@ Deno.serve(async (_req) => {
     });
 
     if (!refreshRes.ok) {
-      return Response.json(
-        { error: "Token refresh failed" },
-        { status: 500 }
-      );
+      return jsonResponse({ error: "Token refresh failed" }, 500);
     }
 
     const newTokens = await refreshRes.json();
@@ -71,10 +84,7 @@ Deno.serve(async (_req) => {
     );
 
     if (!res.ok) {
-      return Response.json(
-        { error: `Strava API error: ${res.status}` },
-        { status: 500 }
-      );
+      return jsonResponse({ error: `Strava API error: ${res.status}` }, 500);
     }
 
     const activities = await res.json();
@@ -107,10 +117,7 @@ Deno.serve(async (_req) => {
       .upsert(rows, { onConflict: "id" });
 
     if (upsertErr) {
-      return Response.json(
-        { error: `Upsert failed: ${upsertErr.message}` },
-        { status: 500 }
-      );
+      return jsonResponse({ error: `Upsert failed: ${upsertErr.message}` }, 500);
     }
   }
 
@@ -121,7 +128,7 @@ Deno.serve(async (_req) => {
   );
   const totalMiles = (totalMeters / 1609.344).toFixed(1);
 
-  return Response.json({
+  return jsonResponse({
     synced: allActivities.length,
     totalMiles,
     message: `Synced ${allActivities.length} runs (${totalMiles} mi)`,

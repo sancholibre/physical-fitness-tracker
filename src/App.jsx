@@ -93,7 +93,8 @@ async function fetchStravaMiles() {
   const { data, error } = await supabase
     .from('strava_activities')
     .select('distance_meters')
-    .eq('user_id', USER_ID);
+    .eq('user_id', USER_ID)
+    .gte('start_date', '2026-01-01T00:00:00Z');
 
   if (error || !data) return null;
   const totalMeters = data.reduce((sum, a) => sum + (a.distance_meters || 0), 0);
