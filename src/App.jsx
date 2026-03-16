@@ -4,7 +4,8 @@ import './App.css';
 
 // ============================================
 // GYST TRACKER - Alec Santiago
-// 89 Days to Peak | Jan 2 - April 1, 2026
+// Multi-Arc Fitness Tracker
+// Arc 1: Jan 2 - Apr 1, 2026 | Arc 2: Apr 2 - Jul 1, 2026
 // ============================================
 
 // Supabase config
@@ -19,8 +20,25 @@ const EDIT_PASSWORD = process.env.REACT_APP_EDIT_PASSWORD;
 const CLOUDINARY_CLOUD_NAME = process.env.REACT_APP_CLOUDINARY_CLOUD_NAME;
 const CLOUDINARY_UPLOAD_PRESET = process.env.REACT_APP_CLOUDINARY_UPLOAD_PRESET;
 
+const STRAVA_AUTH_URL = `${SUPABASE_URL}/functions/v1/strava-auth`;
+const STRAVA_SYNC_URL = `${SUPABASE_URL}/functions/v1/strava-sync`;
+
 const WEIGHT_START = 190;
 const WEIGHT_TARGET = 178;
+const ARC2_WEIGHT_START = 183;
+const ARC2_WEIGHT_TARGET = 175;
+
+const NEW_SCHEDULE_START = '2026-03-16';
+
+const ARCS = {
+  1: { name: 'The First Arc', startDay: 1, totalDays: 89 },
+  2: { name: 'The Second Arc', startDay: 90, totalDays: 91 },
+};
+
+const PHASE_NAMES = {
+  1: 'Base Building', 2: 'Sharpening', 3: 'Taper',
+  4: 'Strength & Speed', 5: 'Peak Performance', 6: 'Consolidation',
+};
 
 // ============================================
 // HELPER FUNCTIONS
@@ -65,6 +83,27 @@ async function saveStateToSupabase(days, checkpoints, settings, lifts) {
     return false;
   }
   return true;
+}
+
+// ============================================
+// STRAVA DATA SERVICE
+// ============================================
+
+async function fetchStravaMiles() {
+  const { data, error } = await supabase
+    .from('strava_activities')
+    .select('distance_meters')
+    .eq('user_id', USER_ID);
+
+  if (error || !data) return null;
+  const totalMeters = data.reduce((sum, a) => sum + (a.distance_meters || 0), 0);
+  return parseFloat((totalMeters / 1609.344).toFixed(1));
+}
+
+async function triggerStravaSync() {
+  const res = await fetch(STRAVA_SYNC_URL, { method: 'POST' });
+  if (!res.ok) throw new Error(`Sync failed: ${res.status}`);
+  return res.json();
 }
 
 // ============================================
@@ -126,22 +165,26 @@ async function uploadWithRetry(file, onProgress, maxRetries = 3) {
 function generateAllDays() {
   const days = [];
   // Use local dates to avoid UTC/DST timezone bugs
-  const start = new Date(2026, 0, 2); // Jan 2, 2026 local
-  const end = new Date(2026, 3, 1);   // Apr 1, 2026 local
   let dayNum = 1;
 
-  for (let d = new Date(start); d <= end; d.setDate(d.getDate() + 1)) {
+  // === ARC 1: Jan 2 - Apr 1, 2026 ===
+  const arc1Start = new Date(2026, 0, 2);
+  const arc1End = new Date(2026, 3, 1);
+
+  for (let d = new Date(arc1Start); d <= arc1End; d.setDate(d.getDate() + 1)) {
     const dateStr = getLocalDateStr(d);
     const dow = d.getDay();
     const weekNum = Math.ceil(dayNum / 7);
     const phase = weekNum <= 6 ? 1 : weekNum <= 10 ? 2 : 3;
-    
+    const useNewSchedule = dateStr >= NEW_SCHEDULE_START;
+
     const day = {
       id: dateStr,
       date: dateStr,
       dayNumber: dayNum,
       weekNumber: weekNum,
       phase,
+      arc: 1,
       dayOfWeek: dow,
       activities: [],
       habits: [],
@@ -149,15 +192,15 @@ function generateAllDays() {
       isTravel: false,
       isCheckpoint: weekNum % 2 === 0 && dow === 0 && weekNum <= 12,
       notes: '',
-      weight: null, // NEW: daily weight tracking
+      weight: null,
       proofFiles: {
         appleHealth: null,
         cronometer: null,
         uploadedAt: null
       }
     };
-    
-    // TRAVEL ADJUSTMENTS
+
+    // TRAVEL ADJUSTMENTS (all before March 16)
     if (dateStr === '2026-01-12') {
       day.isTravel = true;
       day.location = 'Travel → SF';
@@ -172,12 +215,15 @@ function generateAllDays() {
       day.isTravel = true;
       day.location = 'Travel → Denver';
       day.activities = [{ id: 'travel', type: 'travel', name: '✈️ Travel Day (SFO→DEN) - Light activity only', completed: false }];
+    } else if (useNewSchedule) {
+      day.activities = getNewScheduleActivities(dow, weekNum, phase);
     } else {
       day.activities = getRegularActivities(dow, weekNum, phase);
     }
-    
-    // Daily habits (skip pure travel days)
-    if (!day.isTravel) {
+
+    // Daily habits (skip travel days and rest days on new schedule)
+    const isRestDay = useNewSchedule && dow === 0;
+    if (!day.isTravel && !isRestDay) {
       day.habits = [
         { id: 'protein', name: 'Protein 185g+', completed: false },
         { id: 'calories', name: 'Calorie Target', completed: false },
@@ -185,11 +231,57 @@ function generateAllDays() {
         { id: 'sleep', name: 'Sleep 7+hrs', completed: false },
       ];
     }
-    
+
     days.push(day);
     dayNum++;
   }
-  
+
+  // === ARC 2: Apr 2 - Jul 1, 2026 ===
+  const arc2Start = new Date(2026, 3, 2);
+  const arc2End = new Date(2026, 6, 1);
+
+  for (let d = new Date(arc2Start); d <= arc2End; d.setDate(d.getDate() + 1)) {
+    const dateStr = getLocalDateStr(d);
+    const dow = d.getDay();
+    const weekNum = Math.ceil(dayNum / 7);
+    const phase = weekNum <= 19 ? 4 : weekNum <= 25 ? 5 : 6;
+
+    const day = {
+      id: dateStr,
+      date: dateStr,
+      dayNumber: dayNum,
+      weekNumber: weekNum,
+      phase,
+      arc: 2,
+      dayOfWeek: dow,
+      activities: getNewScheduleActivities(dow, weekNum, phase),
+      habits: [],
+      location: 'Denver',
+      isTravel: false,
+      isCheckpoint: weekNum % 2 === 0 && dow === 6 && weekNum >= 16,
+      notes: '',
+      weight: null,
+      proofFiles: {
+        appleHealth: null,
+        cronometer: null,
+        uploadedAt: null
+      }
+    };
+
+    // Daily habits (skip rest days - Sunday)
+    if (dow !== 0) {
+      day.habits = [
+        { id: 'protein', name: 'Protein 185g+', completed: false },
+        { id: 'calories', name: 'Calorie Target', completed: false },
+        { id: 'water', name: 'Water 1gal', completed: false },
+        { id: 'sleep', name: 'Sleep 7+hrs', completed: false },
+      ];
+    }
+
+    days.push(day);
+    dayNum++;
+  }
+
   return days;
 }
 
@@ -324,6 +416,59 @@ function getGTGDetail(weekNum, phase) {
   return '3x18 (54 total)';
 }
 
+// ============================================
+// ARC 2 PROGRESSION FUNCTIONS
+// ============================================
+
+function getArc2TempoDetail(weekNum) {
+  if (weekNum <= 16) return '25min @ 7:45';
+  if (weekNum <= 18) return '30min @ 7:30';
+  if (weekNum <= 20) return '30min @ 7:15';
+  if (weekNum <= 24) return '2x15min @ 7:00';
+  return '25min @ 7:30';
+}
+
+function getArc2GTGDetail(weekNum) {
+  if (weekNum <= 16) return '4x25 (100 total)';
+  if (weekNum <= 18) return '5x22 (110 total)';
+  if (weekNum <= 20) return '5x25 (125 total)';
+  if (weekNum <= 24) return '5x28 (140 total)';
+  return '4x25 (100 total)';
+}
+
+// New weekly schedule used from March 16+ (late Arc 1) and all of Arc 2
+function getNewScheduleActivities(dow, weekNum, phase) {
+  const tempoDetail = phase >= 4 ? getArc2TempoDetail(weekNum) : getTempoDetail(weekNum, phase);
+  const gtgDetail = phase >= 4 ? getArc2GTGDetail(weekNum) : getGTGDetail(weekNum, phase);
+
+  const schedule = {
+    0: [{ id: 'rest', type: 'rest', name: '😴 Full Rest Day', completed: false }],
+    1: [
+      { id: 'z2', type: 'zone2', name: '🏃 Zone 2 - 55min', completed: false },
+      { id: 'gtg', type: 'gtg', name: `💪 Push-up GTG - ${gtgDetail}`, completed: false },
+    ],
+    2: [
+      { id: 'lift', type: 'lifting', name: '🏋️ Upper Push (Flat Bench 3x5, OHP 3x5, Weighted Dips 3x8)', completed: false },
+    ],
+    3: [
+      { id: 'tempo', type: 'tempo', name: `🏃 Tempo - ${tempoDetail}`, completed: false },
+      { id: 'core', type: 'core', name: '🧱 Core Circuit (Plank 3x45s, Hanging Leg Raise 3x10, Pallof Press 3x10)', completed: false },
+    ],
+    4: [
+      { id: 'lift', type: 'lifting', name: '🏋️ Lower Body (Back Squat 3x5, Romanian Deadlift 3x8, BSS 3x8/leg)', completed: false },
+    ],
+    5: [
+      { id: 'lift', type: 'lifting', name: '🏋️ Pull Day (Conventional Deadlift 3x5, Weighted Pull-ups 4x6-8, Pendlay Row 3x8)', completed: false },
+      { id: 'gtg', type: 'gtg', name: `💪 Push-up GTG - ${gtgDetail}`, completed: false },
+    ],
+    6: [
+      { id: 'sat', type: 'endurance', name: '🏃 Long Run 70-80min easy OR 5x800m + 4x200m Sprints', completed: false },
+    ],
+  };
+
+  return schedule[dow] || [];
+}
+
 const CHECKPOINT_TARGETS = {
   2: { run: '12:10', pushups: 38, pullups: 10, sprint: '50.5', weight: 188 },
   4: { run: '11:50', pushups: 41, pullups: 11, sprint: '50.0', weight: 185 },
@@ -331,6 +476,15 @@ const CHECKPOINT_TARGETS = {
   8: { run: '11:20', pushups: 47, pullups: 12, sprint: '49.0', weight: 180 },
   10: { run: '11:05', pushups: 50, pullups: 12, sprint: '48.5', weight: 179 },
   12: { run: '<11:00', pushups: '50+', pullups: 12, sprint: '<49', weight: 178 },
+};
+
+const ARC2_CHECKPOINT_TARGETS = {
+  16: { run: '10:50', pushups: 52, pullups: 13, longRun: '12mi', weight: 181 },
+  18: { run: '10:40', pushups: 55, pullups: 14, longRun: '13mi', weight: 179 },
+  20: { run: '10:30', pushups: 58, pullups: 15, longRun: '14mi', weight: 178 },
+  22: { run: '10:20', pushups: 60, pullups: 15, longRun: '15mi', weight: 177 },
+  24: { run: '10:10', pushups: 62, pullups: 16, longRun: '15mi', weight: 176 },
+  26: { run: '<10:00', pushups: '65+', pullups: 16, longRun: '15mi+', weight: 175 },
 };
 
 const MEALS = {
@@ -363,44 +517,46 @@ const MEALS = {
 // ============================================
 
 function Header({ stats, onGoToToday }) {
+  const arcName = ARCS[stats.currentArc]?.name || 'The First Arc';
   return (
     <header className="header">
       <div className="brand">
         <span className="brand-icon">🎯</span>
         <div>
           <h1>GYST TRACKER</h1>
-          <span className="subtitle">Alec Santiago • 89 Days to Peak</span>
+          <span className="subtitle">Alec Santiago &bull; {arcName}</span>
         </div>
       </div>
       <button className="goto-today-btn" onClick={onGoToToday}>
         📍 Go To Today
       </button>
       <div className="countdown">
-        <div className="cd-num">{stats.daysRemaining}</div>
-        <div className="cd-label">DAYS LEFT</div>
+        <div className="cd-num">D{stats.currentDayNumber}</div>
+        <div className="cd-label">OF {stats.totalDays}</div>
+        <div className="cd-label">W{stats.currentWeek}</div>
       </div>
     </header>
   );
 }
 
-function Stats({ stats }) {
+function Stats({ stats, stravaMiles }) {
   return (
     <div className="stats-bar">
       <div className="stat">
-        <span className="stat-val">{stats.fullDays}/{stats.totalDaysElapsed}</span>
-        <span className="stat-lbl">Full Days</span>
+        <span className="stat-val">{stats.trainingPct}%</span>
+        <span className="stat-lbl">Training</span>
       </div>
       <div className="stat">
-        <span className="stat-val">P{stats.currentPhase}</span>
-        <span className="stat-lbl">{stats.currentPhase === 1 ? 'Base' : stats.currentPhase === 2 ? 'Sharp' : 'Taper'}</span>
+        <span className="stat-val">{stats.habitsPct}%</span>
+        <span className="stat-lbl">Habits</span>
       </div>
       <div className="stat">
-        <span className="stat-val">{stats.totalCompletion}%</span>
-        <span className="stat-lbl">Done</span>
+        <span className="stat-val">{stats.arcProgressPct}%</span>
+        <span className="stat-lbl">Thru Arc {stats.currentArc}</span>
       </div>
       <div className="stat">
-        <span className="stat-val">W{stats.currentWeek}</span>
-        <span className="stat-lbl">of 13</span>
+        <span className="stat-val">{stravaMiles !== null ? stravaMiles : '--'}</span>
+        <span className="stat-lbl">Miles</span>
       </div>
     </div>
   );
@@ -558,7 +714,10 @@ function PhaseInfo() {
       <div className="phase-list">
         <div className="phase-item"><span className="phase-num">P1</span><div className="phase-details"><span className="phase-name">Base Building</span><span className="phase-desc">Weeks 1-6 • Zone 2 volume, heavy lifts, push-up GTG</span></div></div>
         <div className="phase-item"><span className="phase-num">P2</span><div className="phase-details"><span className="phase-name">Sharpening</span><span className="phase-desc">Weeks 7-10 • Faster intervals, time trials, tempo runs</span></div></div>
-        <div className="phase-item"><span className="phase-num">P3</span><div className="phase-details"><span className="phase-name">Taper</span><span className="phase-desc">Weeks 11-12 • Reduced volume, maintain intensity, peak fresh</span></div></div>
+        <div className="phase-item"><span className="phase-num">P3</span><div className="phase-details"><span className="phase-name">Taper</span><span className="phase-desc">Weeks 11-13 • Reduced volume, maintain intensity</span></div></div>
+        <div className="phase-item"><span className="phase-num">P4</span><div className="phase-details"><span className="phase-name">Strength & Speed</span><span className="phase-desc">Weeks 14-19 • Maintain base, add speed, progressive overload</span></div></div>
+        <div className="phase-item"><span className="phase-num">P5</span><div className="phase-details"><span className="phase-name">Peak Performance</span><span className="phase-desc">Weeks 20-25 • Race-pace intervals, PR attempts, peak long runs</span></div></div>
+        <div className="phase-item"><span className="phase-num">P6</span><div className="phase-details"><span className="phase-name">Consolidation</span><span className="phase-desc">Week 26 • Maintain gains, deload</span></div></div>
       </div>
     </div>
   );
@@ -588,8 +747,9 @@ function WeightSparkline({ days, show }) {
 
   if (!show || weightData.length === 0) return null;
 
+  const totalDays = days.length;
   const weights = weightData.map(d => d.weight);
-  const minW = Math.min(...weights, WEIGHT_TARGET) - 2;
+  const minW = Math.min(...weights, WEIGHT_TARGET, ARC2_WEIGHT_TARGET) - 2;
   const maxW = Math.max(...weights, WEIGHT_START) + 2;
   const range = maxW - minW;
 
@@ -601,7 +761,7 @@ function WeightSparkline({ days, show }) {
       : { top: 10, right: 10, bottom: expanded ? 20 : 10, left: 30 };
     const gw = w - pad.left - pad.right;
     const gh = h - pad.top - pad.bottom;
-    const xScale = (dayNum) => pad.left + ((dayNum - 1) / 88) * gw;
+    const xScale = (dayNum) => pad.left + ((dayNum - 1) / (totalDays - 1)) * gw;
     const yScale = (wt) => pad.top + gh - ((wt - minW) / range) * gh;
     const targetY = yScale(WEIGHT_TARGET);
     const startY = yScale(WEIGHT_START);
@@ -643,19 +803,38 @@ function WeightSparkline({ days, show }) {
         })()}
 
         {/* Fullscreen: X-axis week labels */}
-        {isFullscreen && [1, 14, 28, 42, 56, 70, 84, 89].map(d => (
-          <text key={d} x={xScale(d)} y={h - 8} fontSize="11" fill="#888" textAnchor="middle">
-            {d === 1 ? 'D1' : d === 89 ? 'D89' : `W${Math.ceil(d / 7)}`}
-          </text>
-        ))}
+        {isFullscreen && (() => {
+          const labels = [1];
+          for (let dn = 14; dn < totalDays; dn += 14) labels.push(dn);
+          if (labels[labels.length - 1] !== totalDays) labels.push(totalDays);
+          return labels.map(dn => (
+            <text key={dn} x={xScale(dn)} y={h - 8} fontSize="11" fill="#888" textAnchor="middle">
+              {dn === 1 ? 'D1' : dn === totalDays ? `D${totalDays}` : `W${Math.ceil(dn / 7)}`}
+            </text>
+          ));
+        })()}
 
-        {/* Ideal pace line (start to target) */}
+        {/* Arc separator line */}
+        {(expanded || isFullscreen) && totalDays > 89 && (
+          <line x1={xScale(89)} y1={pad.top} x2={xScale(89)} y2={h - pad.bottom} stroke="#555" strokeWidth="1" strokeDasharray="4,4" opacity="0.4" />
+        )}
+
+        {/* Ideal pace lines (per-arc) */}
         {(expanded || isFullscreen) && (
-          <line
-            x1={xScale(1)} y1={yScale(WEIGHT_START)}
-            x2={xScale(89)} y2={yScale(WEIGHT_TARGET)}
-            stroke="#8b5cf6" strokeWidth="1" strokeDasharray="6,3" opacity="0.35"
-          />
+          <>
+            <line
+              x1={xScale(1)} y1={yScale(WEIGHT_START)}
+              x2={xScale(89)} y2={yScale(WEIGHT_TARGET)}
+              stroke="#8b5cf6" strokeWidth="1" strokeDasharray="6,3" opacity="0.35"
+            />
+            {totalDays > 89 && (
+              <line
+                x1={xScale(90)} y1={yScale(ARC2_WEIGHT_START)}
+                x2={xScale(totalDays)} y2={yScale(ARC2_WEIGHT_TARGET)}
+                stroke="#8b5cf6" strokeWidth="1" strokeDasharray="6,3" opacity="0.35"
+              />
+            )}
+          </>
         )}
 
         {/* Projection line from current trend */}
@@ -665,12 +844,12 @@ function WeightSparkline({ days, show }) {
           const daysDiff = last.dayNumber - first.dayNumber;
           if (daysDiff <= 0) return null;
           const rate = (last.weight - first.weight) / daysDiff;
-          const projectedEnd = last.weight + rate * (89 - last.dayNumber);
+          const projectedEnd = last.weight + rate * (totalDays - last.dayNumber);
           const clampedEnd = Math.max(minW, Math.min(maxW, projectedEnd));
           return (
             <line
               x1={xScale(last.dayNumber)} y1={yScale(last.weight)}
-              x2={xScale(89)} y2={yScale(clampedEnd)}
+              x2={xScale(totalDays)} y2={yScale(clampedEnd)}
               stroke="#f59e0b" strokeWidth={isFullscreen ? 2 : 1} strokeDasharray="4,4" opacity="0.6"
             />
           );
@@ -767,14 +946,16 @@ function WeightSparkline({ days, show }) {
 // WEIGHT SIDEBAR COMPONENT (with quick-log)
 // ============================================
 
-function Weight({ current, show, days, onLogTodayWeight, isEditing, todayWeight }) {
+function Weight({ current, show, days, onLogTodayWeight, isEditing, todayWeight, currentArc }) {
   const [quickWeight, setQuickWeight] = useState('');
-  
+
   if (!show) return null;
-  
-  const lost = WEIGHT_START - current;
-  const toGo = current - WEIGHT_TARGET;
-  const pct = Math.min(Math.max((lost / (WEIGHT_START - WEIGHT_TARGET)) * 100, 0), 100);
+
+  const wStart = currentArc === 2 ? ARC2_WEIGHT_START : WEIGHT_START;
+  const wTarget = currentArc === 2 ? ARC2_WEIGHT_TARGET : WEIGHT_TARGET;
+  const lost = wStart - current;
+  const toGo = current - wTarget;
+  const pct = Math.min(Math.max((lost / (wStart - wTarget)) * 100, 0), 100);
   
   const handleQuickLog = (e) => {
     e.preventDefault();
@@ -812,7 +993,7 @@ function Weight({ current, show, days, onLogTodayWeight, isEditing, todayWeight 
         <div><span className="wv">{toGo > 0 ? toGo.toFixed(1) : 0}</span><span className="wl">lbs to go</span></div>
       </div>
       <div className="wt-bar"><div className="wt-fill" style={{ width: `${pct}%` }}></div></div>
-      <div className="wt-range"><span>{WEIGHT_START} lbs</span><span>→</span><span>{WEIGHT_TARGET} lbs</span></div>
+      <div className="wt-range"><span>{wStart} lbs</span><span>→</span><span>{wTarget} lbs</span></div>
       
       {avgLossPerWeek !== null && (
         <div className="wt-rate">
@@ -979,25 +1160,41 @@ function Week({ weekNum, days, isEditing, onToggle, onUploadProof, onRemoveProof
   const phase = days[0]?.phase || 1;
   return (
     <div className="week">
-      <div className="week-head"><h2>Week {weekNum}</h2><span className="ph">Phase {phase}: {phase === 1 ? 'Base Building' : phase === 2 ? 'Sharpening' : 'Taper'}</span></div>
+      <div className="week-head"><h2>Week {weekNum}</h2><span className="ph">Phase {phase}: {PHASE_NAMES[phase] || ''}</span></div>
       <div className="week-days">{days.map(d => <DayCard key={d.id} day={d} isToday={d.date === todayStr} isEditing={isEditing} onToggle={onToggle} onUploadProof={onUploadProof} onRemoveProof={onRemoveProof} onUpdateWeight={onUpdateWeight} onUpdateNotes={onUpdateNotes} onUpdateSkipReason={onUpdateSkipReason} />)}</div>
     </div>
   );
 }
 
 function Checkpoints({ checkpoints, currentWeek, onLog, isEditing }) {
+  const arc1Weeks = [2, 4, 6, 8, 10, 12];
+  const arc2Weeks = [16, 18, 20, 22, 24, 26];
   return (
     <div className="checkpoints">
       <h3>📊 Checkpoints</h3>
-      {[2, 4, 6, 8, 10, 12].map(w => {
+      <div className="cp-arc-label">Arc 1</div>
+      {arc1Weeks.map(w => {
         const t = CHECKPOINT_TARGETS[w];
         const a = checkpoints[w];
-        const past = w * 7 <= currentWeek * 7;
+        const past = w <= currentWeek;
         return (
           <div key={w} className={`cp-row ${a ? 'logged' : ''}`}>
             <div className="cp-wk">Week {w}</div>
             {a ? <span className="cp-done">✔</span> : past && isEditing ? <button className="cp-btn" onClick={() => onLog(w)}>Log</button> : null}
             <div className="cp-tgts"><span>Run: {t.run}</span><span>Push: {t.pushups}</span><span>Pull: {t.pullups}</span></div>
+          </div>
+        );
+      })}
+      <div className="cp-arc-label" style={{ marginTop: '12px' }}>Arc 2</div>
+      {arc2Weeks.map(w => {
+        const t = ARC2_CHECKPOINT_TARGETS[w];
+        const a = checkpoints[w];
+        const past = w <= currentWeek;
+        return (
+          <div key={w} className={`cp-row ${a ? 'logged' : ''}`}>
+            <div className="cp-wk">Week {w}</div>
+            {a ? <span className="cp-done">✔</span> : past && isEditing ? <button className="cp-btn" onClick={() => onLog(w)}>Log</button> : null}
+            <div className="cp-tgts"><span>Run: {t.run}</span><span>Push: {t.pushups}</span><span>Pull: {t.pullups}</span><span>Long: {t.longRun}</span></div>
           </div>
         );
       })}
@@ -1021,7 +1218,8 @@ function Meals() {
 }
 
 function Modal({ week, onSave, onCancel }) {
-  const [v, setV] = useState({ run: '', pushups: '', pullups: '', sprint: '', weight: '' });
+  const isArc2 = week >= 14;
+  const [v, setV] = useState({ run: '', pushups: '', pullups: '', sprint: '', longRun: '', weight: '' });
   return (
     <div className="modal-bg" onClick={onCancel}>
       <div className="modal" onClick={e => e.stopPropagation()}>
@@ -1029,7 +1227,11 @@ function Modal({ week, onSave, onCancel }) {
         <label>Run (mm:ss)<input value={v.run} onChange={e => setV({...v, run: e.target.value})} /></label>
         <label>Push-ups<input type="number" value={v.pushups} onChange={e => setV({...v, pushups: e.target.value})} /></label>
         <label>Pull-ups<input type="number" value={v.pullups} onChange={e => setV({...v, pullups: e.target.value})} /></label>
-        <label>Sprint (s)<input value={v.sprint} onChange={e => setV({...v, sprint: e.target.value})} /></label>
+        {isArc2 ? (
+          <label>Long Run<input value={v.longRun} onChange={e => setV({...v, longRun: e.target.value})} placeholder="e.g. 12mi" /></label>
+        ) : (
+          <label>Sprint (s)<input value={v.sprint} onChange={e => setV({...v, sprint: e.target.value})} /></label>
+        )}
         <label>Weight (lbs)<input type="number" value={v.weight} onChange={e => setV({...v, weight: e.target.value})} /></label>
         <div className="modal-btns"><button onClick={onCancel}>Cancel</button><button className="save" onClick={() => onSave(week, v)}>Save</button></div>
       </div>
@@ -1082,11 +1284,11 @@ function Embed({ stats, days }) {
     <div className="embed">
       <div className="emb-head"><span className="emb-icon">🎯</span><div><h2>GYST Journey</h2><span>Alec Santiago</span></div></div>
       <div className="emb-stats">
-        <div><span className="ev">{stats.daysRemaining}</span><span className="el">Days</span></div>
-        <div><span className="ev">{stats.fullDays}/{stats.totalDaysElapsed}</span><span className="el">Full Days</span></div>
-        <div><span className="ev">{stats.totalCompletion}%</span><span className="el">Done</span></div>
+        <div><span className="ev">D{stats.currentDayNumber}</span><span className="el">Arc {stats.currentArc}</span></div>
+        <div><span className="ev">{stats.trainingPct}%</span><span className="el">Training</span></div>
+        <div><span className="ev">{stats.habitsPct}%</span><span className="el">Habits</span></div>
       </div>
-      <div className="emb-bar"><div style={{ width: `${stats.totalCompletion}%` }}></div></div>
+      <div className="emb-bar"><div style={{ width: `${stats.trainingPct}%` }}></div></div>
       <div className="emb-recent">
         {recent.map(d => {
           const items = [...(d.activities||[]),...(d.habits||[])];
@@ -1131,6 +1333,8 @@ export default function App() {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [lastSaved, setLastSaved] = useState(null);
+  const [stravaMiles, setStravaMiles] = useState(null);
+  const [stravaSyncing, setStravaSyncing] = useState(false);
   
   const isEmbed = window.location.search.includes('embed=true') || window.location.pathname.includes('/embed');
   
@@ -1173,6 +1377,8 @@ export default function App() {
         setLastSaved(stored.updated_at);
       }
       setLoading(false);
+      // Load Strava miles in background
+      fetchStravaMiles().then(miles => { if (miles !== null) setStravaMiles(miles); });
     }
     loadData();
   }, []);
@@ -1217,27 +1423,34 @@ export default function App() {
   }, [days]);
   
   const stats = useMemo(() => {
-    const today = new Date();
-    const todayStr = getLocalDateStr(today);
-    const test = new Date('2026-04-01');
-    const daysRemaining = Math.max(0, Math.ceil((test - today) / 86400000));
+    const todayStr = getLocalDateStr();
     const td = days.find(d => d.date === todayStr);
     const currentPhase = td?.phase || 1;
     const currentWeek = td?.weekNumber || 1;
-    
+    const currentArc = td?.arc || 1;
+    const currentDayNumber = td?.dayNumber || 1;
+    const totalDays = days.length;
+
     const past = days.filter(d => d.date <= todayStr);
     const totalDaysElapsed = past.length;
-    let fullDays = 0;
-    let tot = 0, done = 0;
-    past.forEach(d => {
-      const i = [...(d.activities||[]),...(d.habits||[])];
-      tot += i.length;
-      done += i.filter(x=>x.completed).length;
-      if (i.length > 0 && i.every(x => x.completed)) fullDays++;
-    });
-    const totalCompletion = tot > 0 ? Math.round((done/tot)*100) : 0;
 
-    return { daysRemaining, currentPhase, currentWeek, fullDays, totalDaysElapsed, totalCompletion, currentWeight };
+    // Separate training (activities) vs habits completion
+    let actTot = 0, actDone = 0, habTot = 0, habDone = 0;
+    past.forEach(d => {
+      (d.activities || []).forEach(a => { actTot++; if (a.completed) actDone++; });
+      (d.habits || []).forEach(h => { habTot++; if (h.completed) habDone++; });
+    });
+    const trainingPct = actTot > 0 ? Math.round((actDone / actTot) * 100) : 0;
+    const habitsPct = habTot > 0 ? Math.round((habDone / habTot) * 100) : 0;
+
+    // Arc progress: how far through current arc
+    const arcConfig = ARCS[currentArc];
+    const arcStartDay = arcConfig?.startDay || 1;
+    const arcTotalDays = arcConfig?.totalDays || 90;
+    const dayInArc = currentDayNumber - arcStartDay + 1;
+    const arcProgressPct = Math.min(Math.round((dayInArc / arcTotalDays) * 100), 100);
+
+    return { currentPhase, currentWeek, currentArc, currentDayNumber, totalDays, totalDaysElapsed, trainingPct, habitsPct, arcProgressPct, currentWeight };
   }, [days, currentWeight]);
   
   const weekGroups = useMemo(() => { const g = {}; days.forEach(d => { if (!g[d.weekNumber]) g[d.weekNumber] = []; g[d.weekNumber].push(d); }); return g; }, [days]);
@@ -1284,6 +1497,26 @@ export default function App() {
       }, 100);
     }
   }, [days]);
+  const onSyncStrava = useCallback(async () => {
+    const lastSync = localStorage.getItem('lastStravaSync');
+    if (lastSync && Date.now() - parseInt(lastSync) < 3600000) {
+      alert('Strava was synced less than an hour ago. Try again later.');
+      return;
+    }
+    setStravaSyncing(true);
+    try {
+      const result = await triggerStravaSync();
+      localStorage.setItem('lastStravaSync', String(Date.now()));
+      const miles = await fetchStravaMiles();
+      if (miles !== null) setStravaMiles(miles);
+      alert(result.message || `Synced ${result.synced} runs`);
+    } catch (err) {
+      console.error('Strava sync error:', err);
+      alert('Strava sync failed. Make sure Strava is connected.');
+    } finally {
+      setStravaSyncing(false);
+    }
+  }, []);
   const onUpdateLift = useCallback((id, value) => { setLifts(prev => ({ ...prev, [id]: value })); }, []);
   const onSaveCp = (wk, vals) => { setCheckpoints(p => ({...p, [wk]: vals})); setModal(null); };
   const onPw = e => { e.preventDefault(); if (pw === EDIT_PASSWORD) setIsEditing(true); else alert('Wrong'); setPw(''); };
@@ -1306,7 +1539,7 @@ export default function App() {
   return (
     <div className="app">
       <Header stats={stats} onGoToToday={onGoToToday} />
-      <Stats stats={stats} />
+      <Stats stats={stats} stravaMiles={stravaMiles} />
       {saving && <div className="save-indicator">💾 Saving...</div>}
       {isEditing && <MissingProofAlert days={days} onScrollToDay={onScrollToDay} />}
       <div className="layout">
@@ -1316,13 +1549,14 @@ export default function App() {
                        : <form onSubmit={onPw}><input type="password" placeholder="Password" value={pw} onChange={e=>setPw(e.target.value)} /><button>Unlock</button></form>}
           </div>
           {lastSaved && <div className="last-saved">Last saved: {new Date(lastSaved).toLocaleString()}</div>}
-          <Weight 
-            current={currentWeight} 
-            show={settings.showWeight} 
-            days={days} 
-            onLogTodayWeight={onLogTodayWeight} 
+          <Weight
+            current={currentWeight}
+            show={settings.showWeight}
+            days={days}
+            onLogTodayWeight={onLogTodayWeight}
             isEditing={isEditing}
             todayWeight={todayWeight}
+            currentArc={stats.currentArc}
           />
           {isEditing && (
             <div className="settings-toggles">
@@ -1330,8 +1564,19 @@ export default function App() {
               <label className="toggle"><input type="checkbox" checked={settings.requireProof} onChange={e=>setSettings({...settings,requireProof:e.target.checked})} /> Proof breaks streak</label>
             </div>
           )}
+          {isEditing && (
+            <div className="strava-controls">
+              <a href={STRAVA_AUTH_URL} className="strava-btn connect" target="_blank" rel="noopener noreferrer">🔗 Connect Strava</a>
+              <button className="strava-btn sync" onClick={onSyncStrava} disabled={stravaSyncing}>{stravaSyncing ? '⏳ Syncing...' : '🔄 Sync Strava'}</button>
+            </div>
+          )}
           <LiftTracker lifts={lifts} onUpdate={onUpdateLift} isEditing={isEditing} />
-          <div className="week-nav"><h4>Weeks</h4><div className="wk-btns">{Object.keys(weekGroups).map(w => <button key={w} className={`wk-btn ${+w===displayWeek?'sel':''} ${+w===stats.currentWeek?'cur':''}`} onClick={()=>setSelWeek(+w)}>{w}</button>)}</div></div>
+          <div className="week-nav">
+            <h4>Arc 1</h4>
+            <div className="wk-btns">{Object.keys(weekGroups).filter(w => +w <= 13).map(w => <button key={w} className={`wk-btn ${+w===displayWeek?'sel':''} ${+w===stats.currentWeek?'cur':''}`} onClick={()=>setSelWeek(+w)}>{w}</button>)}</div>
+            <h4 style={{ marginTop: '8px' }}>Arc 2</h4>
+            <div className="wk-btns">{Object.keys(weekGroups).filter(w => +w > 13).map(w => <button key={w} className={`wk-btn ${+w===displayWeek?'sel':''} ${+w===stats.currentWeek?'cur':''}`} onClick={()=>setSelWeek(+w)}>{w}</button>)}</div>
+          </div>
           <ProofCalendarGrid days={days} />
           <Checkpoints checkpoints={checkpoints} currentWeek={stats.currentWeek} onLog={setModal} isEditing={isEditing} />
           <Meals />

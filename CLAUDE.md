@@ -12,13 +12,30 @@ npm run serve      # Serve production build locally
 
 ## Project Overview
 
-GYST Tracker - A React app tracking an 89-day training program to peak physical fitness. Built with Create React App, Supabase backend, and Cloudinary file storage.
+GYST Tracker - A multi-arc fitness tracker for continuous strength and longevity training. Built with Create React App, Supabase backend, and Cloudinary file storage.
+
+### Multi-Arc System
+- **Arc 1**: Jan 2 - Apr 1, 2026 (90 days) — Phases 1-3 (Base → Sharpening → Taper)
+- **Arc 2**: Apr 2 - Jul 1, 2026 (91 days) — Phases 4-6 (Strength & Speed → Peak Performance → Consolidation)
+- Arcs are self-contained with their own checkpoints, weight targets, and phase progressions
+- New arcs can be added to continue indefinitely
+
+### Weekly Schedule (March 16+ / New Schedule)
+- **Sunday**: Rest
+- **Monday-Saturday**: Training (Zone 2, lifting, intervals, tempo, GTG, long run/sprints)
+- Saturday: "Long Run OR 5x800m + 4x200m Sprints" (single checkbox, user chooses)
+- All lift days use premium compounds: Flat Bench, OHP, Weighted Dips, Back Squat, RDL, BSS, Conv. Deadlift, Weighted Pull-ups, Pendlay Row
+- Pre-March 16 schedule: Mondays were rest days, different exercises
+
+### Weight Targets
+- Arc 1: 190 → 178
+- Arc 2: 183 → 175
 
 ## Architecture
 
 ### Single-File Component Structure
 
-All application logic lives in `src/App.jsx` (~1347 lines). This is intentional for a simple single-page app with:
+All application logic lives in `src/App.jsx` (~1500+ lines). This is intentional for a simple single-page app with:
 - 20+ components defined in the same file
 - useState for all state management (no external state library)
 - useCallback/useMemo for memoization
@@ -27,7 +44,7 @@ All application logic lives in `src/App.jsx` (~1347 lines). This is intentional 
 
 - **App** (L1121) - Main component, routes between embed view (`?embed=true`) and full app
 - **Header** (L364) - Top header with stats summary and "Go to Today" button
-- **Stats** (L385) - Full Days (x/y) progress, phase, completion %, week counter
+- **Stats** (L385) - Training %, Habits %, Thru Arc %, Miles (placeholder)
 - **DayCard** (L842) - Individual day with activities, habits, proof uploads, per-activity skip reasons
 - **Week** (L976) - Container for 7 DayCards
 - **Checkpoints** (L987) - Bi-weekly test milestones (Weeks 2,4,6,8,10,12)
@@ -46,7 +63,7 @@ All application logic lives in `src/App.jsx` (~1347 lines). This is intentional 
 
 ### Data Flow
 
-1. **generateAllDays()** - Creates 89-day schedule with pre-programmed workouts, habits, and phase info
+1. **generateAllDays()** - Creates multi-arc schedule with pre-programmed workouts, habits, and phase info
 2. **loadStateFromSupabase()** - Loads persisted state on mount
 3. **saveStateToSupabase()** - Auto-saves on edit (1-second debounce)
 
@@ -69,11 +86,25 @@ Key constants:
 
 - **Supabase** - Database storing days, checkpoints, settings, lifts in `tracker_state` table (single user: `alec-santiago`)
 - **Cloudinary** - File uploads for proof images/PDFs (configured via environment variables)
+- **Strava API** (planned) - OAuth2 integration for cumulative running miles
+- **Health Auto Export** (planned) - iOS app webhook for VO2 max, resting HR, HRV from Apple Health
+
+### Supabase Edge Functions (In Progress)
+
+The `supabase/` directory has been initialized (`supabase init`). Edge Functions are planned but not yet deployed:
+- `strava-auth` — OAuth redirect to Strava
+- `strava-callback` — Token exchange + storage
+- `strava-sync` — Activity fetching + upsert to `strava_activities` table
+- `health-webhook` — Receives Health Auto Export POST data to `health_metrics` table
+
+**Blocked on**: `supabase login` (interactive browser auth) → `supabase link --project-ref cqpjytbpvmgzziqluhnz`
+
+See `.claude/plans/kind-marinating-metcalfe.md` for full implementation plan.
 
 ### State Shape
 
 ```javascript
-days[]        // 89 day objects with activities, habits, proofs, weights, skipReasons
+days[]        // Multi-arc day objects with activities, habits, proofs, weights, skipReasons
 checkpoints{} // Bi-weekly test results keyed by week number
 settings{}    // User preferences (showWeight, requireProof)
 lifts{}       // Current strength maxes
@@ -120,9 +151,10 @@ Also deployable to Vercel or Replit as standard Create React App.
 ## Domain-Specific Context
 
 - **Pescatarian diet** - No meat, no salmon (allergy). Fish, eggs, dairy, tofu allowed.
-- **Training phases** - Phase 1 (base building), Phase 2 (sharpening), Phase 3 (taper)
+- **Training phases** - P1 Base, P2 Sharpening, P3 Taper (Arc 1), P4 Strength & Speed, P5 Peak Performance, P6 Consolidation (Arc 2)
 - **Travel adjustments** - Jan 12-22 SF trip has modified hotel-friendly workouts
-- **Test date** - April 1, 2026
+- **Schedule cutover** - March 16, 2026: Sunday rest, premium compound lifts replace old schedule
+- **80-minute workout windows** - All sessions designed to fit within ~80 minutes
 
 ## Business Build-Out Plans
 

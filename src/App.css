@@ -863,3 +863,27 @@ body {
     font-size: 0.7rem;
   }
 }
+
+/* Strava controls */
+.strava-controls {
+  display: flex;
+  gap: 0.5rem;
+  margin-top: 0.75rem;
+}
+.strava-btn {
+  flex: 1;
+  padding: 0.5rem 0.75rem;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--bg-card);
+  color: var(--text);
+  font-size: 0.75rem;
+  cursor: pointer;
+  text-align: center;
+  text-decoration: none;
+  transition: background 0.15s;
+}
+.strava-btn:hover { background: var(--bg-hover); }
+.strava-btn.connect { border-color: #fc4c02; color: #fc4c02; }
+.strava-btn.sync { border-color: var(--blue); color: var(--blue); }
+.strava-btn:disabled { opacity: 0.5; cursor: not-allowed; }
