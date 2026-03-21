@@ -87,7 +87,7 @@ Key constants:
 - **Supabase** - Database storing days, checkpoints, settings, lifts in `tracker_state` table (single user: `alec-santiago`)
 - **Cloudinary** - File uploads for proof images/PDFs (configured via environment variables)
 - **Strava API** (live) - OAuth2 integration for cumulative running miles, synced to `strava_activities` table
-- **Health Auto Export** (planned) - iOS app webhook for VO2 max, resting HR, HRV from Apple Health
+- **Health Auto Export** (live) - iOS app webhook for VO2 max, resting HR, HRV, active energy, steps, sleep, workouts from Apple Health
 
 ### Supabase Edge Functions
 
@@ -96,14 +96,15 @@ The `supabase/` directory is linked to project `cqpjytbpvmgzziqluhnz`. Deployed 
 - `strava-callback` — Token exchange + storage in `strava_tokens`, redirects to app
 - `strava-sync` — Fetches all runs from Strava API (paginated), upserts to `strava_activities`, includes CORS headers and auto token refresh
 
-Planned but not yet deployed:
-- `health-webhook` — Receives Health Auto Export POST data to `health_metrics` table
+- `health-webhook` — Receives Health Auto Export POST data, aggregates raw data points (sum for cumulative metrics like calories/steps, average for point-in-time like VO2/HR), upserts to `health_metrics` and `health_workouts` tables. Auth via `?key=<HEALTH_WEBHOOK_KEY>` query param. Handles HAE v2 format with Summarize Data OFF (raw disaggregated data points)
 
 ### Supabase Tables
 
 - `tracker_state` — Main app state (days, checkpoints, settings, lifts) keyed by user_id
 - `strava_tokens` — OAuth access/refresh tokens (RLS: service_role only, no anon access)
 - `strava_activities` — Synced run activities with distance, time, date (RLS: anon SELECT allowed)
+- `health_metrics` — Daily scalar values (VO2 max, resting HR, HRV, active energy, steps, sleep, basal energy, wrist temp). Unique on `(user_id, metric_name, date)`. RLS: anon SELECT, service_role writes
+- `health_workouts` — Discrete workout events with type, duration, distance, HR, energy. Unique on `(user_id, source_id)`. RLS: anon SELECT, service_role writes
 
 ### Strava Integration Flow
 
@@ -112,6 +113,28 @@ Planned but not yet deployed:
 3. User clicks "Sync Strava" (1hr throttle via localStorage) → `strava-sync` fetches all runs, upserts to `strava_activities`
 4. `fetchStravaMiles()` queries `strava_activities` filtered to 2026, sums distances → Miles stat
 5. Miles also auto-loaded on page mount
+
+### Health Auto Export Integration Flow
+
+1. Health Auto Export (iOS) triggers automation (manual or scheduled) → POSTs JSON to `health-webhook?key=<secret>`
+2. Webhook parses HAE v2 payload with **Summarize Data OFF** — receives raw disaggregated data points
+3. Webhook aggregates per metric per day: `sum` for cumulative (active_energy, basal_energy, step_count, sleep_duration) and `avg` for point-in-time (vo2_max, resting_heart_rate, hrv, sleep_wrist_temp)
+4. Metrics mapped via `METRIC_MAP`: vo2_max, resting_heart_rate, hrv, active_energy, step_count, sleep_duration, sleep_wrist_temp, basal_energy
+5. Data upserted to `health_metrics` and `health_workouts` tables
+6. Frontend loads health data on mount via `fetchHealthMetrics()` / `fetchHealthWorkouts()`
+7. Auto-proof: days with health workout data auto-satisfy the Apple Health proof requirement (no screenshot needed). Legacy uploaded screenshots also still count.
+8. HealthPanel in sidebar shows VO2/RHR/HRV summary; DayCard shows workout details + total calories (active + basal) inline
+9. Two separate HAE automations required: one for Health Metrics, one for Workouts
+10. **Hybrid proof system**: Apple Health screenshot upload slot shows for Jan 2 – Mar 15 (historical days before HAE was set up). Mar 16+ relies on HAE auto-proof only. Cronometer upload shows for all days.
+
+### Health Auto Export — Known Issues & Next Steps (as of Mar 16, 2026)
+
+- **HAE "Summarize Data" must be OFF** — webhook handles raw point aggregation server-side
+- **HAE manual export is limited to 7 days** — cannot backfill historical data via the app
+- **Missing metrics in current HAE automation**: Only active_energy, basal_energy, and vo2_max are flowing. Resting HR, HRV, step count, sleep duration, and wrist temp need to be added to the HAE Metrics automation config on iPhone
+- **DB is sparse**: Only ~2 days of metric data as of Mar 16. Monitoring whether daily automations reliably fire going forward
+- **Pre-Feb 28 data**: Apple Health may not retain granular data far enough back. For Jan 2 – Mar 15, screenshot uploads are the proof fallback
+- **Verify after first full day (Mar 17)**: Confirm both automations (Metrics + Workouts) fire and data appears correctly in DB. Check that active_energy + basal_energy total looks reasonable (should be 2500-4500 kcal on training days)
 
 ### State Shape
 
@@ -141,7 +164,7 @@ lifts{}       // Current strength maxes
 - **Local date handling** - `getLocalDateStr()` avoids timezone issues
 - **Embed mode** - Minimal widget view triggered by `?embed=true` URL param
 - **Day completion states** - Cards show: green (complete), orange (mostly - missed 1-2 items), yellow (partial), red (missed)
-- **Proof calendar** - Travel days show ✈️ instead of requiring proof uploads
+- **Proof system** - Hybrid: Jan 2 – Mar 15 shows Apple Health screenshot upload + Cronometer upload; Mar 16+ Apple Health proof is auto-satisfied via HAE data (no screenshot slot). Travel days show ✈️. Proof calendar shows ✔ (both), 📱 (health only), 🥗 (cronometer only)
 - **Per-activity skip reasons** - Uncompleted items on past days show inline "Why skipped?" input (edit mode) or italic amber text (read-only)
 - **Weight projection** - Sparkline shows ideal pace line (purple) and projected trend line (amber) based on current loss rate
 - **Clickable weight dots** - Click any data point on the sparkline to see exact date + weight tooltip

@@ -887,3 +887,30 @@ body {
 .strava-btn.connect { border-color: #fc4c02; color: #fc4c02; }
 .strava-btn.sync { border-color: var(--blue); color: var(--blue); }
 .strava-btn:disabled { opacity: 0.5; cursor: not-allowed; }
+
+/* Health Panel */
+.health-panel { background: var(--bg-card); border: 1px solid var(--border); border-radius: 12px; padding: 12px 14px; margin-bottom: 12px; }
+.health-panel h3 { font-size: 0.85rem; margin: 0 0 8px 0; color: var(--text); user-select: none; }
+.health-summary { display: flex; gap: 10px; flex-wrap: wrap; }
+.hs-item { font-size: 0.75rem; color: var(--accent); background: rgba(34,197,94,0.1); padding: 2px 8px; border-radius: 6px; font-family: 'JetBrains Mono', monospace; }
+.health-expanded { margin-top: 10px; border-top: 1px solid var(--border); padding-top: 8px; }
+.he-row { font-size: 0.78rem; color: var(--text-dim); margin-bottom: 4px; }
+.he-row strong { color: var(--text); }
+.he-workouts { margin-top: 8px; }
+.he-label { font-size: 0.7rem; color: var(--text-dim); text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 4px; }
+.he-workout { font-size: 0.78rem; color: var(--text); margin-bottom: 2px; }
+.he-workout span { color: var(--text-dim); margin-left: 4px; }
+
+/* Health workouts in DayCard */
+.health-workouts-block { background: rgba(34,197,94,0.05); border: 1px solid rgba(34,197,94,0.15); border-radius: 8px; padding: 6px 10px; margin: 6px 0; }
+.health-workouts-label { font-size: 0.65rem; color: var(--accent); text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 4px; font-weight: 600; }
+.health-workout-row { font-size: 0.75rem; color: var(--text-dim); display: flex; gap: 6px; flex-wrap: wrap; align-items: baseline; }
+.hw-type { color: var(--text); font-weight: 500; }
+.hw-stat { font-family: 'JetBrains Mono', monospace; font-size: 0.7rem; }
+
+/* Auto-proof badge */
+.auto-proof-badge { font-size: 0.75rem; color: var(--accent); padding: 6px 10px; border: 1px dashed rgba(34,197,94,0.3); border-radius: 8px; text-align: center; flex: 1; }
+.health-calories-row { font-size: 0.7rem; color: var(--text-dim); display: flex; gap: 10px; flex-wrap: wrap; padding-top: 4px; border-top: 1px solid rgba(255,255,255,0.05); margin-top: 4px; font-family: 'JetBrains Mono', monospace; }
+.hc-total { color: var(--accent); font-weight: 600; }
+.he-calories { display: flex; gap: 10px; flex-wrap: wrap; }
+.he-total { color: var(--accent); font-weight: 600; }

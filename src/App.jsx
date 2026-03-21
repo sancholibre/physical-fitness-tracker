@@ -108,6 +108,41 @@ async function triggerStravaSync() {
 }
 
 // ============================================
+// HEALTH DATA SERVICE
+// ============================================
+
+async function fetchHealthMetrics() {
+  const { data, error } = await supabase
+    .from('health_metrics')
+    .select('metric_name, value, units, date')
+    .eq('user_id', USER_ID)
+    .gte('date', '2026-01-01')
+    .order('date', { ascending: false });
+
+  if (error || !data) return {};
+  // Group by date → metric_name → { value, units }
+  const byDate = {};
+  data.forEach(row => {
+    if (!byDate[row.date]) byDate[row.date] = {};
+    byDate[row.date][row.metric_name] = { value: row.value, units: row.units };
+  });
+  return byDate;
+}
+
+async function fetchHealthWorkouts() {
+  const { data, error } = await supabase
+    .from('health_workouts')
+    .select('workout_type, duration_seconds, distance_meters, avg_heart_rate, max_heart_rate, active_energy_kcal, date, start_time')
+    .eq('user_id', USER_ID)
+    .gte('date', '2026-01-01')
+    .order('start_time', { ascending: false });
+
+  if (error || !data) return { workouts: [], dates: new Set() };
+  const dates = new Set(data.map(w => w.date));
+  return { workouts: data, dates };
+}
+
+// ============================================
 // CLOUDINARY UPLOAD SERVICE
 // ============================================
 
@@ -637,19 +672,19 @@ function FileUpload({ dayId, type, currentUrl, onUpload, onRemove, isEditing }) 
   );
 }
 
-function ProofStatusBadge({ day }) {
-  const hasHealth = !!day.proofFiles?.appleHealth;
+function ProofStatusBadge({ day, healthDates }) {
+  const hasHealth = !!day.proofFiles?.appleHealth || (healthDates && healthDates.has(day.id));
   const hasCrono = !!day.proofFiles?.cronometer;
   if (hasHealth && hasCrono) return <span className="proof-badge complete" title="Proof uploaded">📸✔</span>;
   if (hasHealth || hasCrono) return <span className="proof-badge partial" title="Partial proof">{hasHealth ? '📱' : ''}{hasCrono ? '🥗' : ''}</span>;
   return null;
 }
 
-function ProofCalendarGrid({ days }) {
+function ProofCalendarGrid({ days, healthDates }) {
   const weeks = [];
   for (let i = 0; i < days.length; i += 7) weeks.push(days.slice(i, i + 7));
   const todayStr = getLocalDateStr();
-  
+
   return (
     <div className="proof-calendar">
       <h4>📸 Proof Status</h4>
@@ -664,7 +699,7 @@ function ProofCalendarGrid({ days }) {
                 if (day.isTravel) {
                   return <span key={day.id} className="pd travel" title={`${day.date} - Travel`}>✈️</span>;
                 }
-                const hasHealth = !!day.proofFiles?.appleHealth;
+                const hasHealth = !!day.proofFiles?.appleHealth || (healthDates && healthDates.has(day.id));
                 const hasCrono = !!day.proofFiles?.cronometer;
                 const complete = hasHealth && hasCrono;
                 const partial = hasHealth || hasCrono;
@@ -704,6 +739,72 @@ function LiftTracker({ lifts, onUpdate, isEditing }) {
           </div>
         ))}
       </div>
+    </div>
+  );
+}
+
+function HealthPanel({ healthMetrics, healthWorkouts }) {
+  const [expanded, setExpanded] = useState(false);
+  const todayStr = getLocalDateStr();
+
+  // Find latest values for key metrics (scan backwards from today)
+  const getLatest = (metricName) => {
+    const dates = Object.keys(healthMetrics).sort().reverse();
+    for (const date of dates) {
+      if (healthMetrics[date]?.[metricName]) return { ...healthMetrics[date][metricName], date };
+    }
+    return null;
+  };
+
+  const vo2 = getLatest('vo2_max');
+  const rhr = getLatest('resting_heart_rate');
+  const hrv = getLatest('hrv');
+  const todayMetrics = healthMetrics[todayStr] || {};
+  const todayWorkouts = healthWorkouts.filter(w => w.date === todayStr);
+
+  const hasAnyData = vo2 || rhr || hrv || Object.keys(todayMetrics).length > 0 || todayWorkouts.length > 0;
+  if (!hasAnyData) return null;
+
+  return (
+    <div className="health-panel">
+      <h3 onClick={() => setExpanded(!expanded)} style={{ cursor: 'pointer' }}>
+        {expanded ? '▾' : '▸'} Apple Health
+      </h3>
+      <div className="health-summary">
+        {vo2 && <span className="hs-item" title={`VO2 Max (${vo2.date})`}>VO2 {vo2.value.toFixed(1)}</span>}
+        {rhr && <span className="hs-item" title={`Resting HR (${rhr.date})`}>RHR {Math.round(rhr.value)}</span>}
+        {hrv && <span className="hs-item" title={`HRV (${hrv.date})`}>HRV {Math.round(hrv.value)}</span>}
+      </div>
+      {expanded && (
+        <div className="health-expanded">
+          {(todayMetrics.active_energy || todayMetrics.basal_energy) && (
+            <div className="he-row he-calories">
+              {todayMetrics.active_energy && <span>Active: <strong>{Math.round(todayMetrics.active_energy.value)}</strong></span>}
+              {todayMetrics.basal_energy && <span>Resting: <strong>{Math.round(todayMetrics.basal_energy.value)}</strong></span>}
+              {todayMetrics.active_energy && todayMetrics.basal_energy && <span className="he-total">Total: <strong>{Math.round(todayMetrics.active_energy.value + todayMetrics.basal_energy.value)} kcal</strong></span>}
+            </div>
+          )}
+          {todayMetrics.step_count && <div className="he-row">Steps: <strong>{Math.round(todayMetrics.step_count.value).toLocaleString()}</strong></div>}
+          {todayMetrics.sleep_duration && <div className="he-row">Sleep: <strong>{todayMetrics.sleep_duration.value.toFixed(1)} hr</strong></div>}
+          {todayWorkouts.length > 0 && (
+            <div className="he-workouts">
+              <div className="he-label">Today's Workouts</div>
+              {todayWorkouts.map((w, i) => {
+                const mins = w.duration_seconds ? Math.round(w.duration_seconds / 60) : null;
+                const miles = w.distance_meters ? (w.distance_meters / 1609.344).toFixed(1) : null;
+                return (
+                  <div key={i} className="he-workout">
+                    <strong>{w.workout_type}</strong>
+                    {mins && <span> {mins}min</span>}
+                    {w.avg_heart_rate && <span> {Math.round(w.avg_heart_rate)}bpm</span>}
+                    {miles && <span> {miles}mi</span>}
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </div>
+      )}
     </div>
   );
 }
@@ -1022,7 +1123,7 @@ function Weight({ current, show, days, onLogTodayWeight, isEditing, todayWeight,
   );
 }
 
-function DayCard({ day, isToday, isEditing, onToggle, onUploadProof, onRemoveProof, onUpdateWeight, onUpdateNotes, onUpdateSkipReason }) {
+function DayCard({ day, isToday, isEditing, onToggle, onUploadProof, onRemoveProof, onUpdateWeight, onUpdateNotes, onUpdateSkipReason, healthDates, healthWorkoutsForDay, healthMetricsForDay }) {
   const dt = new Date(day.date + 'T12:00:00');
   const dayName = dt.toLocaleDateString('en-US', { weekday: 'short' });
   const monthDay = dt.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
@@ -1032,7 +1133,8 @@ function DayCard({ day, isToday, isEditing, onToggle, onUploadProof, onRemovePro
   const pct = total > 0 ? Math.round((done / total) * 100) : 0;
   const todayStr = getLocalDateStr();
   const isPast = day.date < todayStr;
-  const hasAllProof = day.proofFiles?.appleHealth && day.proofFiles?.cronometer;
+  const hasAutoHealth = healthDates && healthDates.has(day.id);
+  const hasAllProof = (day.proofFiles?.appleHealth || hasAutoHealth) && day.proofFiles?.cronometer;
 
   let cardClass = 'day-card';
   if (isToday) cardClass += ' today';
@@ -1050,7 +1152,7 @@ function DayCard({ day, isToday, isEditing, onToggle, onUploadProof, onRemovePro
         {day.location !== 'Denver' && <span className="loc">📍{day.location}</span>}
         {isToday && <span className="badge today">TODAY</span>}
         {day.isCheckpoint && <span className="badge cp">📊</span>}
-        {hasAllProof && <ProofStatusBadge day={day} />}
+        {hasAllProof && <ProofStatusBadge day={day} healthDates={healthDates} />}
         {total > 0 && <span className={`score ${pct === 100 ? 'full' : ''}`}>{done}/{total}</span>}
       </div>
       <div className="day-body">
@@ -1120,11 +1222,38 @@ function DayCard({ day, isToday, isEditing, onToggle, onUploadProof, onRemovePro
             </div>
           </div>
         )}
+        {((healthWorkoutsForDay && healthWorkoutsForDay.length > 0) || (healthMetricsForDay && (healthMetricsForDay.active_energy || healthMetricsForDay.basal_energy))) && (
+          <div className="health-workouts-block">
+            <div className="health-workouts-label">Apple Health</div>
+            {healthWorkoutsForDay && healthWorkoutsForDay.map((w, i) => {
+              const mins = w.duration_seconds ? Math.round(w.duration_seconds / 60) : null;
+              const miles = w.distance_meters ? (w.distance_meters / 1609.344).toFixed(1) : null;
+              return (
+                <div key={i} className="health-workout-row">
+                  <span className="hw-type">{w.workout_type}</span>
+                  {mins && <span className="hw-stat">{mins}min</span>}
+                  {w.avg_heart_rate && <span className="hw-stat">{Math.round(w.avg_heart_rate)}bpm avg</span>}
+                  {miles && <span className="hw-stat">{miles}mi</span>}
+                  {w.active_energy_kcal && <span className="hw-stat">{Math.round(w.active_energy_kcal)}kcal</span>}
+                </div>
+              );
+            })}
+            {healthMetricsForDay && (healthMetricsForDay.active_energy || healthMetricsForDay.basal_energy) && (
+              <div className="health-calories-row">
+                {healthMetricsForDay.active_energy && <span className="hc-item">Active: {Math.round(healthMetricsForDay.active_energy.value)} kcal</span>}
+                {healthMetricsForDay.basal_energy && <span className="hc-item">Resting: {Math.round(healthMetricsForDay.basal_energy.value)} kcal</span>}
+                {healthMetricsForDay.active_energy && healthMetricsForDay.basal_energy && <span className="hc-total">Total: {Math.round(healthMetricsForDay.active_energy.value + healthMetricsForDay.basal_energy.value)} kcal</span>}
+              </div>
+            )}
+          </div>
+        )}
         {!day.isTravel && (
           <div className="proof-section">
             <div className="proof-label-row">📸 Daily Proof</div>
             <div className="proof-uploads">
-              <FileUpload dayId={day.id} type="appleHealth" currentUrl={day.proofFiles?.appleHealth} onUpload={onUploadProof} onRemove={onRemoveProof} isEditing={isEditing} />
+              {day.date < '2026-03-16' && (
+                <FileUpload dayId={day.id} type="appleHealth" currentUrl={day.proofFiles?.appleHealth} onUpload={onUploadProof} onRemove={onRemoveProof} isEditing={isEditing} />
+              )}
               <FileUpload dayId={day.id} type="cronometer" currentUrl={day.proofFiles?.cronometer} onUpload={onUploadProof} onRemove={onRemoveProof} isEditing={isEditing} />
             </div>
           </div>
@@ -1156,13 +1285,13 @@ function DayCard({ day, isToday, isEditing, onToggle, onUploadProof, onRemovePro
   );
 }
 
-function Week({ weekNum, days, isEditing, onToggle, onUploadProof, onRemoveProof, onUpdateWeight, onUpdateNotes, onUpdateSkipReason }) {
+function Week({ weekNum, days, isEditing, onToggle, onUploadProof, onRemoveProof, onUpdateWeight, onUpdateNotes, onUpdateSkipReason, healthDates, healthWorkouts, healthMetrics }) {
   const todayStr = getLocalDateStr();
   const phase = days[0]?.phase || 1;
   return (
     <div className="week">
       <div className="week-head"><h2>Week {weekNum}</h2><span className="ph">Phase {phase}: {PHASE_NAMES[phase] || ''}</span></div>
-      <div className="week-days">{days.map(d => <DayCard key={d.id} day={d} isToday={d.date === todayStr} isEditing={isEditing} onToggle={onToggle} onUploadProof={onUploadProof} onRemoveProof={onRemoveProof} onUpdateWeight={onUpdateWeight} onUpdateNotes={onUpdateNotes} onUpdateSkipReason={onUpdateSkipReason} />)}</div>
+      <div className="week-days">{days.map(d => <DayCard key={d.id} day={d} isToday={d.date === todayStr} isEditing={isEditing} onToggle={onToggle} onUploadProof={onUploadProof} onRemoveProof={onRemoveProof} onUpdateWeight={onUpdateWeight} onUpdateNotes={onUpdateNotes} onUpdateSkipReason={onUpdateSkipReason} healthDates={healthDates} healthWorkoutsForDay={healthWorkouts ? healthWorkouts.filter(w => w.date === d.id) : []} healthMetricsForDay={healthMetrics ? healthMetrics[d.id] : null} />)}</div>
     </div>
   );
 }
@@ -1240,14 +1369,14 @@ function Modal({ week, onSave, onCancel }) {
   );
 }
 
-function MissingProofAlert({ days, onScrollToDay }) {
+function MissingProofAlert({ days, onScrollToDay, healthDates }) {
   const today = new Date();
   const yesterday = new Date(today);
   yesterday.setDate(yesterday.getDate() - 1);
   const yesterdayStr = getLocalDateStr(yesterday);
   const yesterdayDay = days.find(d => d.id === yesterdayStr);
   if (!yesterdayDay || yesterdayDay.isTravel) return null;
-  const hasHealth = !!yesterdayDay.proofFiles?.appleHealth;
+  const hasHealth = !!yesterdayDay.proofFiles?.appleHealth || (healthDates && healthDates.has(yesterdayStr));
   const hasCrono = !!yesterdayDay.proofFiles?.cronometer;
   if (hasHealth && hasCrono) return null;
   return (
@@ -1278,7 +1407,7 @@ function SocialLinks() {
   );
 }
 
-function Embed({ stats, days }) {
+function Embed({ stats, days, healthDates }) {
   const todayStr = getLocalDateStr();
   const recent = days.filter(d => d.date <= todayStr && d.date >= getLocalDateStr(new Date(Date.now() - 7*24*60*60*1000))).reverse();
   return (
@@ -1294,7 +1423,7 @@ function Embed({ stats, days }) {
         {recent.map(d => {
           const items = [...(d.activities||[]),...(d.habits||[])];
           const done = items.filter(x=>x.completed).length;
-          const hasHealth = !!d.proofFiles?.appleHealth;
+          const hasHealth = !!d.proofFiles?.appleHealth || (healthDates && healthDates.has(d.id));
           const hasCrono = !!d.proofFiles?.cronometer;
           const hasProof = hasHealth && hasCrono;
           return (
@@ -1302,7 +1431,7 @@ function Embed({ stats, days }) {
               <span>{new Date(d.date+'T12:00:00').toLocaleDateString('en-US',{weekday:'short',month:'short',day:'numeric'})}</span>
               <span className="er-score">{done}/{items.length}</span>
               <span className="er-proof">
-                {d.isTravel ? <span className="proof-na">✈️</span> : hasProof ? <><a href={d.proofFiles.appleHealth} target="_blank" rel="noopener noreferrer" className="proof-icon" title="Health">📱</a><a href={d.proofFiles.cronometer} target="_blank" rel="noopener noreferrer" className="proof-icon" title="Cronometer">🥗</a></> : <span className="proof-missing-embed">❌ No proof</span>}
+                {d.isTravel ? <span className="proof-na">✈️</span> : hasProof ? <><span className="proof-icon" title="Health">📱</span><a href={d.proofFiles.cronometer} target="_blank" rel="noopener noreferrer" className="proof-icon" title="Cronometer">🥗</a></> : <span className="proof-missing-embed">❌ No proof</span>}
               </span>
             </div>
           );
@@ -1336,6 +1465,9 @@ export default function App() {
   const [lastSaved, setLastSaved] = useState(null);
   const [stravaMiles, setStravaMiles] = useState(null);
   const [stravaSyncing, setStravaSyncing] = useState(false);
+  const [healthMetrics, setHealthMetrics] = useState({});
+  const [healthWorkouts, setHealthWorkouts] = useState([]);
+  const [healthDates, setHealthDates] = useState(new Set());
   
   const isEmbed = window.location.search.includes('embed=true') || window.location.pathname.includes('/embed');
   
@@ -1380,6 +1512,11 @@ export default function App() {
       setLoading(false);
       // Load Strava miles in background
       fetchStravaMiles().then(miles => { if (miles !== null) setStravaMiles(miles); });
+      // Load health data in background
+      Promise.all([fetchHealthMetrics(), fetchHealthWorkouts()]).then(([metrics, wkData]) => {
+        if (metrics) setHealthMetrics(metrics);
+        if (wkData) { setHealthWorkouts(wkData.workouts); setHealthDates(wkData.dates); }
+      });
     }
     loadData();
   }, []);
@@ -1518,6 +1655,11 @@ export default function App() {
       setStravaSyncing(false);
     }
   }, []);
+  const onRefreshHealth = useCallback(async () => {
+    const [metrics, wkData] = await Promise.all([fetchHealthMetrics(), fetchHealthWorkouts()]);
+    if (metrics) setHealthMetrics(metrics);
+    if (wkData) { setHealthWorkouts(wkData.workouts); setHealthDates(wkData.dates); }
+  }, []);
   const onUpdateLift = useCallback((id, value) => { setLifts(prev => ({ ...prev, [id]: value })); }, []);
   const onSaveCp = (wk, vals) => { setCheckpoints(p => ({...p, [wk]: vals})); setModal(null); };
   const onPw = e => { e.preventDefault(); if (pw === EDIT_PASSWORD) setIsEditing(true); else alert('Wrong'); setPw(''); };
@@ -1533,7 +1675,7 @@ export default function App() {
     );
   }
   
-  if (isEmbed) return <Embed stats={stats} days={days} />;
+  if (isEmbed) return <Embed stats={stats} days={days} healthDates={healthDates} />;
   
   const displayWeek = selWeek || stats.currentWeek;
   
@@ -1542,7 +1684,7 @@ export default function App() {
       <Header stats={stats} onGoToToday={onGoToToday} />
       <Stats stats={stats} stravaMiles={stravaMiles} />
       {saving && <div className="save-indicator">💾 Saving...</div>}
-      {isEditing && <MissingProofAlert days={days} onScrollToDay={onScrollToDay} />}
+      {isEditing && <MissingProofAlert days={days} onScrollToDay={onScrollToDay} healthDates={healthDates} />}
       <div className="layout">
         <aside className="side">
           <div className="edit-box">
@@ -1569,8 +1711,10 @@ export default function App() {
             <div className="strava-controls">
               <a href={STRAVA_AUTH_URL} className="strava-btn connect" target="_blank" rel="noopener noreferrer">🔗 Connect Strava</a>
               <button className="strava-btn sync" onClick={onSyncStrava} disabled={stravaSyncing}>{stravaSyncing ? '⏳ Syncing...' : '🔄 Sync Strava'}</button>
+              <button className="strava-btn sync" onClick={onRefreshHealth}>🔄 Refresh Health</button>
             </div>
           )}
+          <HealthPanel healthMetrics={healthMetrics} healthWorkouts={healthWorkouts} />
           <LiftTracker lifts={lifts} onUpdate={onUpdateLift} isEditing={isEditing} />
           <div className="week-nav">
             <h4>Arc 1</h4>
@@ -1578,14 +1722,14 @@ export default function App() {
             <h4 style={{ marginTop: '8px' }}>Arc 2</h4>
             <div className="wk-btns">{Object.keys(weekGroups).filter(w => +w > 13).map(w => <button key={w} className={`wk-btn ${+w===displayWeek?'sel':''} ${+w===stats.currentWeek?'cur':''}`} onClick={()=>setSelWeek(+w)}>{w}</button>)}</div>
           </div>
-          <ProofCalendarGrid days={days} />
+          <ProofCalendarGrid days={days} healthDates={healthDates} />
           <Checkpoints checkpoints={checkpoints} currentWeek={stats.currentWeek} onLog={setModal} isEditing={isEditing} />
           <Meals />
           <PhaseInfo />
           <div className="share"><h4>📤 Embed</h4><code>?embed=true</code></div>
           <SocialLinks />
         </aside>
-        <main className="main"><Week weekNum={displayWeek} days={weekGroups[displayWeek]||[]} isEditing={isEditing} onToggle={onToggle} onUploadProof={onUploadProof} onRemoveProof={onRemoveProof} onUpdateWeight={onUpdateWeight} onUpdateNotes={onUpdateNotes} onUpdateSkipReason={onUpdateSkipReason} /></main>
+        <main className="main"><Week weekNum={displayWeek} days={weekGroups[displayWeek]||[]} isEditing={isEditing} onToggle={onToggle} onUploadProof={onUploadProof} onRemoveProof={onRemoveProof} onUpdateWeight={onUpdateWeight} onUpdateNotes={onUpdateNotes} onUpdateSkipReason={onUpdateSkipReason} healthDates={healthDates} healthWorkouts={healthWorkouts} healthMetrics={healthMetrics} /></main>
       </div>
       {modal && <Modal week={modal} onSave={onSaveCp} onCancel={()=>setModal(null)} />}
       <button className="fab-today" onClick={onGoToToday} title="Go to Today">📍</button>
