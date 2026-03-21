@@ -25,14 +25,31 @@ function extractLocalDate(dateStr: string): string {
 // Metrics we care about — maps HAE names to our stored names
 // agg: "sum" for cumulative daily totals, "avg" for point-in-time measurements
 const METRIC_MAP: Record<string, { name: string; units: string; agg: "sum" | "avg" }> = {
+  // VO2 Max — multiple possible HAE key formats
   vo2_max: { name: "vo2_max", units: "ml/kg/min", agg: "avg" },
+  vo2max: { name: "vo2_max", units: "ml/kg/min", agg: "avg" },
+  cardio_fitness: { name: "vo2_max", units: "ml/kg/min", agg: "avg" },
+  // Resting Heart Rate
   resting_heart_rate: { name: "resting_heart_rate", units: "bpm", agg: "avg" },
+  restingheartrate: { name: "resting_heart_rate", units: "bpm", agg: "avg" },
+  // HRV
   heart_rate_variability: { name: "hrv", units: "ms", agg: "avg" },
+  hrv: { name: "hrv", units: "ms", agg: "avg" },
+  heartratevariability: { name: "hrv", units: "ms", agg: "avg" },
+  heart_rate_variability_sdnn: { name: "hrv", units: "ms", agg: "avg" },
+  // Energy
   active_energy: { name: "active_energy", units: "kcal", agg: "sum" },
-  step_count: { name: "step_count", units: "count", agg: "sum" },
-  sleep_analysis: { name: "sleep_duration", units: "hr", agg: "sum" },
-  apple_sleeping_wrist_temperature: { name: "sleep_wrist_temp", units: "°C", agg: "avg" },
+  activeenergy: { name: "active_energy", units: "kcal", agg: "sum" },
   basal_energy_burned: { name: "basal_energy", units: "kcal", agg: "sum" },
+  basalenergyburned: { name: "basal_energy", units: "kcal", agg: "sum" },
+  resting_energy: { name: "basal_energy", units: "kcal", agg: "sum" },
+  restingenergy: { name: "basal_energy", units: "kcal", agg: "sum" },
+  // Steps / Sleep
+  step_count: { name: "step_count", units: "count", agg: "sum" },
+  stepcount: { name: "step_count", units: "count", agg: "sum" },
+  sleep_analysis: { name: "sleep_duration", units: "hr", agg: "sum" },
+  sleepanalysis: { name: "sleep_duration", units: "hr", agg: "sum" },
+  apple_sleeping_wrist_temperature: { name: "sleep_wrist_temp", units: "°C", agg: "avg" },
 };
 
 Deno.serve(async (req) => {
@@ -67,6 +84,12 @@ Deno.serve(async (req) => {
   let metricsUpserted = 0;
   let workoutsUpserted = 0;
 
+  // Log incoming metric names for debugging
+  if (data.metrics && Array.isArray(data.metrics)) {
+    const incomingNames = data.metrics.map((m: any) => m.name);
+    console.log("Incoming metric names:", JSON.stringify(incomingNames));
+  }
+
   // Process metrics — aggregate multiple data points per metric per day
   // HAE with "Summarize Data" OFF sends many raw data points (e.g. active_energy
   // comes in dozens of small increments). We sum cumulative metrics and average
@@ -76,8 +99,14 @@ Deno.serve(async (req) => {
     const buckets = new Map<string, { mapped: typeof METRIC_MAP[string]; date: string; values: number[]; lastSourceDate: string }>();
 
     for (const metric of data.metrics) {
-      const mapped = METRIC_MAP[metric.name];
-      if (!mapped) continue;
+      // Normalize: "Resting Heart Rate" → "resting_heart_rate", "restingHeartRate" → "restingheartrate"
+      const rawName = metric.name || "";
+      const normalized = rawName.toLowerCase().replace(/[\s]+/g, "_").replace(/[^a-z0-9_]/g, "");
+      const mapped = METRIC_MAP[normalized] || METRIC_MAP[rawName];
+      if (!mapped) {
+        console.log(`Unrecognized metric: "${rawName}" (normalized: "${normalized}")`);
+        continue;
+      }
 
       for (const point of metric.data || []) {
         if (typeof point.qty !== "number") continue;
